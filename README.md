@@ -33,5 +33,5 @@ This is source code setup repository for MiTAC Capri2 of Genoa/OpenSIL/EDK2.
 
 ## Reference
 
-- All OpenSIL related repositories are forked from https://github.com/openSIL
+- All openSIL related repositories are forked from https://github.com/openSIL; the projected plan is also aligned with AMD's roadmap of openSIL
 - Aspeed Driver version is 1.13.05 from Aspeed website (BmcGopDxe)
