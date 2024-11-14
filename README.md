@@ -1,4 +1,4 @@
-# Capri2-edk2-helper
+# Capri2-genoa-edk2-helper
 
 This is source code setup repository for MiTAC Capri2 of Genoa/OpenSIL/EDK2.
 
