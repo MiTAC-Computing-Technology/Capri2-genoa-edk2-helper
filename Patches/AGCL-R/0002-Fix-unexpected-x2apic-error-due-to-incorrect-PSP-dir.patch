@@ -1,0 +1,48 @@
+From d731bc587704d9b059861a1c89ca001b6b7fa289 Mon Sep 17 00:00:00 2001
+From: Samba Chi <samba.chi@mitaccomputing.com>
+Date: Fri, 1 Nov 2024 15:10:27 +0800
+Subject: [PATCH 2/3] Fix unexpected x2apic error due to incorrect PSP
+ directory size
+
+---
+ AgesaModulePkg/Include/Library/AmdDirectoryBaseLib.h          | 1 +
+ .../Library/AmdDirectoryBaseLib/AmdDirectoryBaseLib.c         | 4 +++-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/AgesaModulePkg/Include/Library/AmdDirectoryBaseLib.h b/AgesaModulePkg/Include/Library/AmdDirectoryBaseLib.h
+index 289a829..d011953 100644
+--- a/AgesaModulePkg/Include/Library/AmdDirectoryBaseLib.h
++++ b/AgesaModulePkg/Include/Library/AmdDirectoryBaseLib.h
+@@ -24,6 +24,7 @@
+ #define FCH_ROM_END_ADDRESS_2 0xFFFFFFFFul
+ 
+ #define MAX_DIR_ENTRY_COUNT 64
++#define MAX_PSP_DIR_SIZE sizeof(PSP_DIRECTORY_HEADER) + (sizeof(BIOS_DIRECTORY_ENTRY) * MAX_DIR_ENTRY_COUNT)
+ 
+ #define IS_SPI_ROM2_OFFSET(a) (((a) < 0x1000000) ? TRUE : FALSE)
+ #define IS_IN_SPI_ROM2_WINDOW(a) ((((a) & ~(0xFFFFFF)) == 0xFF000000) ? TRUE : FALSE)
+diff --git a/AgesaModulePkg/Library/AmdDirectoryBaseLib/AmdDirectoryBaseLib.c b/AgesaModulePkg/Library/AmdDirectoryBaseLib/AmdDirectoryBaseLib.c
+index 20ca116..2c5875d 100644
+--- a/AgesaModulePkg/Library/AmdDirectoryBaseLib/AmdDirectoryBaseLib.c
++++ b/AgesaModulePkg/Library/AmdDirectoryBaseLib/AmdDirectoryBaseLib.c
+@@ -231,7 +231,7 @@ GetBiosDirectory (
+   BiosDirBase = *((UINT32 *) ((UINT8 *)&FirmwareTableBase + BiosDirEfsOffset));
+ 
+   //Get the BIOS Dir
+-  if (ReadSpiRom (BiosDirBase, (UINT8*)BiosDir, sizeof(BIOS_DIRECTORY)) != TRUE) {
++  if (ReadSpiRom (BiosDirBase, (UINT8*)BiosDir, MAX_PSP_DIR_SIZE) != TRUE) {
+     return FALSE;
+   }
+ 
+@@ -336,6 +336,8 @@ BIOSEntryInfo (
+   IN OUT   UINT64                      *EntryDestination
+   )
+ {
++  PspDirectoryLibConstructor ();  // Create BiosDirectoryHob
++
+   BIOS_DIRECTORY          *BiosDir;
+   UINT64                  BiosLevel2BaseAddress;
+   UINTN                   i;
+-- 
+2.34.1
+

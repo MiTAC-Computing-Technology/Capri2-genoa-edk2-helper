@@ -1,0 +1,25 @@
+From 8c3010815ace45cf318ff7ff79d4d5ec97084e9a Mon Sep 17 00:00:00 2001
+From: Samba Chi <samba.chi@mitaccomputing.com>
+Date: Fri, 1 Nov 2024 15:53:17 +0800
+Subject: [PATCH] Lower the log level of PCI Segment message
+
+---
+ .../Library/PciSegmentInfoLibSimple/PciSegmentInfoLibSimple.c   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Platform/Intel/MinPlatformPkg/Pci/Library/PciSegmentInfoLibSimple/PciSegmentInfoLibSimple.c b/Platform/Intel/MinPlatformPkg/Pci/Library/PciSegmentInfoLibSimple/PciSegmentInfoLibSimple.c
+index 398f4d4b78..9da8a84908 100644
+--- a/Platform/Intel/MinPlatformPkg/Pci/Library/PciSegmentInfoLibSimple/PciSegmentInfoLibSimple.c
++++ b/Platform/Intel/MinPlatformPkg/Pci/Library/PciSegmentInfoLibSimple/PciSegmentInfoLibSimple.c
+@@ -53,7 +53,7 @@ GetPciSegmentInfo (
+     mPciSegmentInfo.StartBusNumber = 0;
+     mPciSegmentInfo.EndBusNumber   = (UINT8)((PcdGet32 (PcdPciExpressRegionLength) / 0x100000) - 1);
+ 
+-    DEBUG ((DEBUG_INFO, "mPciSegmentInfo.BaseAddress - 0x%x\n", mPciSegmentInfo.BaseAddress));
++    DEBUG ((DEBUG_VERBOSE, "mPciSegmentInfo.BaseAddress - 0x%x\n", mPciSegmentInfo.BaseAddress));
+ 
+     if (mPciSegmentInfo.BaseAddress == 0) {
+       // Premem phase
+-- 
+2.34.1
+

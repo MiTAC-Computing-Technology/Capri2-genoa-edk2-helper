@@ -1,0 +1,35 @@
+From 149e1e55c37fbde0dcdeea5efd9fdad4fd29ae9e Mon Sep 17 00:00:00 2001
+From: Samba Chi <samba.chi@mitaccomputing.com>
+Date: Fri, 1 Nov 2024 15:09:53 +0800
+Subject: [PATCH 1/3] Fix unused variable warnings
+
+---
+ .../Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.c           | 1 -
+ .../Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.h           | 1 +
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/AgesaModulePkg/Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.c b/AgesaModulePkg/Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.c
+index c6c5a74..5917e1f 100644
+--- a/AgesaModulePkg/Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.c
++++ b/AgesaModulePkg/Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.c
+@@ -21,7 +21,6 @@
+ 
+ extern UINT16 mSwSmiCmdAddress;
+ 
+-EFI_SMM_CPU_PROTOCOL         *mSmmCpuProtocol;
+ FCH_SMM_SW_NODE              *HeadFchSmmSwNodePtr;
+ 
+ EFI_STATUS
+diff --git a/AgesaModulePkg/Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.h b/AgesaModulePkg/Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.h
+index d12d36d..d226bd4 100644
+--- a/AgesaModulePkg/Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.h
++++ b/AgesaModulePkg/Fch/9004/Fch9004SmmDispatcher/FchSmmSwDispatcher.h
+@@ -50,4 +50,5 @@ typedef struct _FCH_SMM_SW_NODE {
+ #define MAX_SW_SMI_VALUE              0xFF
+ extern  FCH_SMM_SW_NODE               *HeadFchSmmSwNodePtr;
+ extern  FCH_SMM_SW_CONTEXT            *EfiSmmSwContext;
++extern  EFI_SMM_CPU_PROTOCOL          *mSmmCpuProtocol;
+ #endif
+-- 
+2.34.1
+

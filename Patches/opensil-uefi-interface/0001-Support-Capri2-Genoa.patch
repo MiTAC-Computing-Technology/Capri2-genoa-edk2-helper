@@ -1,0 +1,2161 @@
+From 71bc2db41ec979becf3aeef9b6b0aa8e9a5e0554 Mon Sep 17 00:00:00 2001
+From: Samba Chi <samba.chi@mitaccomputing.com>
+Date: Mon, 4 Nov 2024 13:03:13 +0800
+Subject: [PATCH] Support Capri2 Genoa
+
+---
+ Platform/Capri2-Genoa/Dxe/CcxDataInit.c    |  94 +++++
+ Platform/Capri2-Genoa/Dxe/SilCapri2Dxe.inf |  54 +++
+ Platform/Capri2-Genoa/Dxe/SilDataInit.c    | 168 +++++++++
+ Platform/Capri2-Genoa/Pei/CcxDataInit.c    | 191 +++++++++++
+ Platform/Capri2-Genoa/Pei/CxlDataInit.c    |  89 +++++
+ Platform/Capri2-Genoa/Pei/FchDataInit.c    | 359 ++++++++++++++++++++
+ Platform/Capri2-Genoa/Pei/MpioDataInit.c   | 222 ++++++++++++
+ Platform/Capri2-Genoa/Pei/NbioDataInit.c   | 120 +++++++
+ Platform/Capri2-Genoa/Pei/RasDataInit.c    |  77 +++++
+ Platform/Capri2-Genoa/Pei/RcMgrDataInit.c  |  48 +++
+ Platform/Capri2-Genoa/Pei/SdciDataInit.c   |  44 +++
+ Platform/Capri2-Genoa/Pei/SilCapri2Pei.inf | 377 +++++++++++++++++++++
+ Platform/Capri2-Genoa/Pei/SilDataInit.c    | 102 ++++++
+ Platform/Capri2-Genoa/Smm/SilCapri2Smm.inf |  42 +++
+ Platform/Capri2-Genoa/Smm/SilDataInitSmm.c |  41 +++
+ 15 files changed, 2028 insertions(+)
+ create mode 100644 Platform/Capri2-Genoa/Dxe/CcxDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Dxe/SilCapri2Dxe.inf
+ create mode 100644 Platform/Capri2-Genoa/Dxe/SilDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Pei/CcxDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Pei/CxlDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Pei/FchDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Pei/MpioDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Pei/NbioDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Pei/RasDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Pei/RcMgrDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Pei/SdciDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Pei/SilCapri2Pei.inf
+ create mode 100644 Platform/Capri2-Genoa/Pei/SilDataInit.c
+ create mode 100644 Platform/Capri2-Genoa/Smm/SilCapri2Smm.inf
+ create mode 100644 Platform/Capri2-Genoa/Smm/SilDataInitSmm.c
+
+diff --git a/Platform/Capri2-Genoa/Dxe/CcxDataInit.c b/Platform/Capri2-Genoa/Dxe/CcxDataInit.c
+new file mode 100644
+index 0000000..715534e
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Dxe/CcxDataInit.c
+@@ -0,0 +1,94 @@
++/**
++ * @file  CcxDataInit.c
++ * @brief The Host will locate a structure within the memory block 
++ *        that was assigned by an IP block
++ *        Allocates the Secure Nested Paging (SNP) for Reverse Map Table (RMP)
++ *
++ */
++/**
++ * Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++ *
++ */
++
++#include <Library/DebugLib.h>
++#include <Library/PcdLib.h>
++#include <Sil-api.h>
++#include <CcxClass-api.h>
++#include <xPRF-api.h>
++#include <Library/AmdDirectoryBaseLib.h>
++#include <Uefi/UefiSpec.h>
++#include <Uefi/UefiBaseType.h>
++#include <Library/UefiBootServicesTableLib.h>
++
++/**
++ * CcxAllocateMemoryToRMPTable
++ *
++ * @brief   Allocate Secure Nested Paging for Reverse Map Table
++ *
++ */
++void
++CcxAllocateMemoryToRMPTable (
++ void
++ )
++{
++
++  EFI_PHYSICAL_ADDRESS    RmpTableBase;
++  EFI_STATUS              Status;
++  EFI_PHYSICAL_ADDRESS    AlignedTableAddress ;
++  CCXCLASS_DATA_BLK       *CcxData;
++
++  RmpTableBase        = 0;
++  AlignedTableAddress = 0;
++
++  CcxData = (CCXCLASS_DATA_BLK *)SilFindStructure (SilId_CcxClass,  0);
++  if (CcxData == NULL) {
++    DEBUG ((DEBUG_ERROR, "OpenSIL DXE Driver Could not found the block memory\n"));
++    return; // Could not find the IP input block
++  }
++
++  if((CcxData->CcxOutputBlock.AmdIsSnpSupported) &&
++     (CcxData->CcxInputBlock.AmdSnpMemCover != 0)) {
++
++    RmpTableBase = (EFI_PHYSICAL_ADDRESS)CcxData->CcxOutputBlock.AmdRmpTableBase;
++	// find enough memory for RMP table to fit on MB boundary
++    Status = gBS->AllocatePages (AllocateMaxAddress,
++                                 EfiReservedMemoryType,
++                                 (UINTN)(EFI_SIZE_TO_PAGES (CcxData->CcxOutputBlock.AmdRmpTableSize + SIZE_1MB)),
++                                 &RmpTableBase
++                                );
++    ASSERT_EFI_ERROR (Status);
++    if (EFI_ERROR (Status)) {
++      DEBUG ((DEBUG_ERROR, "[ERROR] Failed to allocate RMP Table.\n"));
++      return;
++    }
++
++    // align on MB boundary
++    AlignedTableAddress = (RmpTableBase + SIZE_1MB - 1) & ~(SIZE_1MB - 1);
++
++    // free pages before reallocating on MB boundary
++    gBS->FreePages (RmpTableBase, (UINTN)(EFI_SIZE_TO_PAGES (CcxData->CcxOutputBlock.AmdRmpTableSize + SIZE_1MB)));
++
++    // reserve memory for RMP Table on MB boundary
++    Status = gBS->AllocatePages (AllocateAddress,
++                                 EfiReservedMemoryType,
++                                 (UINTN)(EFI_SIZE_TO_PAGES (CcxData->CcxOutputBlock.AmdRmpTableSize)),
++                                 &AlignedTableAddress
++                                );
++
++    if (EFI_ERROR (Status)) {
++      DEBUG ((DEBUG_ERROR, "[ERROR] Try to allocate RMP Table at 0x%x but failed.\n",AlignedTableAddress));
++      return;
++    }
++
++    // zero out RMP table
++    gBS->SetMem ((VOID *) AlignedTableAddress,
++                 (UINTN)(CcxData->CcxOutputBlock.AmdRmpTableSize),
++                 0
++                );
++
++    xPrfSetSnpRmp(AlignedTableAddress,CcxData->CcxOutputBlock.AmdRmpTableSize);
++  }
++  else {
++    DEBUG ((DEBUG_ERROR, "AmdIsSnpSupported not supported\n"));
++  }
++}
+diff --git a/Platform/Capri2-Genoa/Dxe/SilCapri2Dxe.inf b/Platform/Capri2-Genoa/Dxe/SilCapri2Dxe.inf
+new file mode 100644
+index 0000000..cfcd60b
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Dxe/SilCapri2Dxe.inf
+@@ -0,0 +1,54 @@
++#
++# @file  SilOnyxDxe.inf
++# @brief DXE driver made for OpenSil SI calls
++#
++# Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++#
++
++[Defines]
++  INF_VERSION                    = 0x00010005
++  BASE_NAME                      = SilCapri2Dxe
++  FILE_GUID                      = 6350d448-1e63-4457-8cda-146167d6cd62
++  MODULE_TYPE                    = DXE_DRIVER
++  VERSION_STRING                 = 0.1
++  ENTRY_POINT                    = SilDxeEntryPoint
++
++[Sources]
++  SilDataInit.c
++  CcxDataInit.c
++
++[Packages]
++  MdePkg/MdePkg.dec
++  MdeModulePkg/MdeModulePkg.dec
++  AmdOpenSilPkg/opensil-uefi-interface/AmdOpenSilPkg.dec
++  AgesaModulePkg/AgesaPublicModulePkg.dec
++  AgesaPkg/AgesaPublicPkg.dec
++
++[LibraryClasses.common.DXE_DRIVER]
++  UefiLib
++  SilDxeInit
++
++[LibraryClasses]
++  UefiDriverEntryPoint
++  UefiBootServicesTableLib
++  DebugLib
++  libAMDxUSL
++  libAMDxSIM
++  libAMDxPRF
++  HobLib
++  BaseMemoryLib
++  AmdDirectoryBaseLib
++
++[Guids]
++
++[Pcd]
++
++[Ppis]
++
++[Protocols]
++  gEfiPciIoProtocolGuid
++  gOpenSilxPrfProtocolGuid
++  gEfiMpServiceProtocolGuid
++
++[Depex]
++  TRUE
+diff --git a/Platform/Capri2-Genoa/Dxe/SilDataInit.c b/Platform/Capri2-Genoa/Dxe/SilDataInit.c
+new file mode 100644
+index 0000000..f03da77
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Dxe/SilDataInit.c
+@@ -0,0 +1,168 @@
++/**
++ * @file  SilDataInit.c
++ * @brief DXE driver created to execute Capri2 SI OpenSIL call.
++ *
++ */
++/*
++ * Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++ *
++ */
++#include <Uefi.h>
++
++#include <stddef.h>
++#include <stdint.h>
++#include <stdbool.h>
++#include <Library/UefiLib.h>
++#include <Library/DebugLib.h>
++#include <Library/UefiBootServicesTableLib.h>
++#include <SilDxe.h>
++#include <CcxClass-api.h>
++#include <xSIM-api.h>
++#include <xPRF-api.h>
++#include <Library/BaseLib.h>
++#include <Uefi/UefiSpec.h>
++#include <Uefi/UefiBaseType.h>
++#include <PiDxe.h>
++#include <Library/UefiDriverEntryPoint.h>
++#include <Protocol/MpService.h>
++#include <Library/BaseMemoryLib.h>
++#include <xPrfServicesDxe.h>
++#include <Include/xPrfServicesDxeProtocol.h>
++#include <Include/Pi/PiHob.h>
++#include <Include/Library/HobLib.h>
++
++/*
++ * Guids produced/consumed by openSIL DXE driver
++ */
++extern EFI_GUID gPeiOpenSilDataHobGuid;
++extern EFI_GUID gEfiPciIoProtocolGuid;
++
++void CcxAllocateMemoryToRMPTable(void);
++
++/**
++ * SilPciIoNotification
++ *
++ * @brief Event handler to be launched after PCI I/O protocol
++ * @details This is the openSil 'POST PCI Enumeration' time point (TP2)
++ *
++ * @return  void
++ */
++VOID
++EFIAPI
++SilPciIoNotification (
++  IN       EFI_EVENT        Event,
++  IN       VOID             *Context
++  )
++{
++
++  DEBUG ((DEBUG_INFO, "OpenSIL PCI IO callback\n"));
++  // Pass control to openSIL for timepoint 2
++  InitializeSiTp2 ();
++
++  /// @todo : Revisit if we need reset capability from TP3
++  // SilHandleReset (PeiServices, SilStatus);
++
++  gBS->CloseEvent(Event);
++}
++
++/**
++ * SilReadyToBootCallback
++ *
++ * @brief Event handler to be launched after ready to boot
++ * @details This is the openSil 'Pre-OS Boot' time point (TP3)
++ *
++ * @return  void
++ *
++ */
++VOID
++EFIAPI
++SilReadyToBootCallback (
++  IN       EFI_EVENT        Event,
++  IN       VOID             *Context
++  )
++{
++
++  DEBUG ((DEBUG_INFO, "OpenSIL ready to boot callback\n"));
++  // Pass control to openSIL for timepoint 2
++  InitializeSiTp3 ();
++
++  /// @todo : Revisit if we need reset capability from TP3
++  // SilHandleReset (PeiServices, SilStatus);
++
++  gBS->CloseEvent(Event);
++}
++
++/**
++ * Capri2lIpBlocksInit
++ *
++ * @brief Initialize IP blocks with the host FW specific data: PCDs, Setup variables, etc.
++ */
++EFI_STATUS Capri2IpBlocksInit (VOID)
++{
++  EFI_STATUS Status;
++// place Capri2 IP data init code that depends on Host FW (PCDs, Setup questions, etc.)
++
++  Status = EFI_SUCCESS;
++
++  return Status;
++}
++
++/**
++ * @brief Capri2 openSIL FW DXE driver entry point
++ *
++ * @param ImageHandle   Image handle of DXE driver
++ * @param Systemtable   Pointer to UEFI system table
++ *
++ * @return EFI_SUCCESS
++ */
++EFI_STATUS
++EFIAPI
++SilDxeEntryPoint (
++  IN       EFI_HANDLE           ImageHandle,
++  IN       EFI_SYSTEM_TABLE     *SystemTable
++  )
++{
++  EFI_STATUS         Status;
++  EFI_EVENT          PciIoEvent;
++  EFI_EVENT          BootEvent;
++  VOID               *Registration;
++
++  Status = EFI_SUCCESS;
++  DEBUG ((DEBUG_INFO, "OpenSIL DXE Driver execution\n"));
++
++  Status = SilFwDataInit (SystemTable, (SIL_FWINIT_FUNCTION) Capri2IpBlocksInit);
++  ASSERT_EFI_ERROR (Status);
++
++  CcxAllocateMemoryToRMPTable();
++
++  // Create PciIo notification to call SillPciIoCallback
++  Status = gBS->CreateEvent (
++              EVT_NOTIFY_SIGNAL,
++              TPL_NOTIFY,
++              (EFI_EVENT_NOTIFY) SilPciIoNotification,
++              NULL,
++              &PciIoEvent
++              );
++  ASSERT_EFI_ERROR (Status);
++
++  Status = gBS->RegisterProtocolNotify (
++              &gEfiPciIoProtocolGuid,
++              PciIoEvent,
++              &Registration
++              );
++  ASSERT_EFI_ERROR (Status);
++
++  // Create ready to boot callback to call SilReadyToBootCallback
++  Status = EfiCreateEventReadyToBootEx (
++              TPL_CALLBACK,
++              (EFI_EVENT_NOTIFY) SilReadyToBootCallback,
++              NULL,
++              &BootEvent
++              );
++  ASSERT_EFI_ERROR (Status);
++
++  // Install xPRF services protocol to provide xPRF interface to UEFI
++  Status = xPrfServicesProtocolInstall ();
++
++  return Status;
++}
+diff --git a/Platform/Capri2-Genoa/Pei/CcxDataInit.c b/Platform/Capri2-Genoa/Pei/CcxDataInit.c
+new file mode 100644
+index 0000000..7af6f5d
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/CcxDataInit.c
+@@ -0,0 +1,191 @@
++/* Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved. */
++/**
++ * @file  CcxDataInit.c
++ * @brief Initialize Ccx data prior to openSIL execution..
++ *
++ */
++
++#include <Library/DebugLib.h>
++#include <Library/PcdLib.h>
++#include <Sil-api.h>
++#include <CcxClass-api.h>
++#include <CcxMicrocodePatch.h>
++#include <Library/AmdDirectoryBaseLib.h>
++#include <Library/PeiServicesLib.h>
++#include <Library/BaseMemoryLib.h>
++
++extern EFI_GUID gPeiOpenSilCcxDownCoreDataGuid;
++
++/**
++ * SetCcxData
++ *
++ * @brief Set the data in Ccx init IP block
++ * @details
++ *      Locate the Ccx - the resource initialization IP block
++ * @return EFI_SUCCESS or EFI_DEVICE_ERROR
++ */
++EFI_STATUS
++SetCcxData (
++  void
++  )
++{
++  CCXCLASS_DATA_BLK *CcxData;
++  uint64_t  UcodeEntryAddress;
++  uint32_t  UcodeEntrySize;
++  bool      UcodeBIOSEntryInfoStatus;
++  bool      MicrocodeAddFound;
++  uint8_t   InstanceNumber;
++  MPB       *MicroCode;
++
++  UcodeEntryAddress        = 0;
++  UcodeEntrySize           = 0;
++  UcodeBIOSEntryInfoStatus = FALSE;
++  InstanceNumber           = 0;
++  MicrocodeAddFound        = FALSE;
++
++  CcxData = (CCXCLASS_DATA_BLK *)SilFindStructure (SilId_CcxClass,  0);
++  DEBUG ((DEBUG_ERROR, "SIL Ccx memory block is found at: 0x%x \n", CcxData));
++  if (CcxData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  CcxData->CcxInputBlock.AmdApicMode                    = PcdGet8(PcdAmdApicMode);
++  CcxData->CcxInputBlock.AmdDownCoreMode                = PcdGet8(PcdAmdDownCoreMode);
++  CcxData->CcxInputBlock.AmdCcdMode                     = PcdGet8(PcdAmdCcdMode);
++  CcxData->CcxInputBlock.AmdSmtMode                     = PcdGet8(PcdAmdSmtMode);
++  CcxData->CcxInputBlock.AmdIbrsEn                      = PcdGetBool(PcdAmdIbrsEn);
++  CcxData->CcxInputBlock.AmdEnvironmentFlag             = PcdGet32(PcdAmdEnvironmentFlag);
++  CcxData->CcxInputBlock.AmdBranchSampling              = PcdGetBool(PcdAmdBranchSampling);
++  CcxData->CcxInputBlock.AmdSnpMemCover                 = PcdGet8(PcdAmdSnpMemCover);
++  CcxData->CcxInputBlock.AmdVmplEnable                  = PcdGetBool(PcdAmdVmplEnable);
++  CcxData->CcxInputBlock.AmdSnpMemSize                  = PcdGet32 (PcdAmdSnpMemSize);
++  CcxData->CcxInputBlock.AmdGameMode                    = PcdGetBool(PcdAmdGameMode);
++  CcxData->CcxInputBlock.AmdCStateMode                  = PcdGet8(PcdAmdCStateMode);
++  CcxData->CcxInputBlock.AmdCc6Ctrl                     = PcdGet8(PcdAmdCc6Ctrl);
++  CcxData->CcxInputBlock.AmdCStateIoBaseAddress         = PcdGet16(PcdAmdCStateIoBaseAddress);
++  CcxData->CcxInputBlock.AmdCpbMode                     = PcdGet8(PcdAmdCpbMode);
++  CcxData->CcxInputBlock.EnSpecStFill                   = PcdGetBool(PcdAmdEnSpecStFill);
++  CcxData->CcxInputBlock.EnableSvmAVIC                  = PcdGetBool(PcdAmdEnableSvmAVIC);
++  CcxData->CcxInputBlock.IbsHardwareEn                  = PcdGetBool(PcdAmdIbsHardwareEn);
++  CcxData->CcxInputBlock.EnableSvmX2AVIC                = PcdGetBool(PcdAmdEnableSvmX2AVIC);
++  CcxData->CcxInputBlock.MonMwaitDis                    = PcdGet8(PcdAmdMonMwaitDis);
++  CcxData->CcxInputBlock.AmdFixedMtrr250                = PcdGet64(PcdAmdFixedMtrr250);
++  CcxData->CcxInputBlock.AmdFixedMtrr258                = PcdGet64(PcdAmdFixedMtrr258);
++  CcxData->CcxInputBlock.AmdFixedMtrr259                = PcdGet64(PcdAmdFixedMtrr259);
++  CcxData->CcxInputBlock.AmdFixedMtrr268                = PcdGet64(PcdAmdFixedMtrr268);
++  CcxData->CcxInputBlock.AmdFixedMtrr269                = PcdGet64(PcdAmdFixedMtrr269);
++  CcxData->CcxInputBlock.AmdFixedMtrr26A                = PcdGet64(PcdAmdFixedMtrr26A);
++  CcxData->CcxInputBlock.AmdFixedMtrr26B                = PcdGet64(PcdAmdFixedMtrr26B);
++  CcxData->CcxInputBlock.AmdFixedMtrr26C                = PcdGet64(PcdAmdFixedMtrr26C);
++  CcxData->CcxInputBlock.AmdFixedMtrr26D                = PcdGet64(PcdAmdFixedMtrr26D);
++  CcxData->CcxInputBlock.AmdFixedMtrr26E                = PcdGet64(PcdAmdFixedMtrr26E);
++  CcxData->CcxInputBlock.AmdFixedMtrr26F                = PcdGet64(PcdAmdFixedMtrr26F);
++  CcxData->CcxInputBlock.DisableWcSpecConfig            = PcdGet8(PcdAmdDisableWcSpecConfig);
++  CcxData->CcxInputBlock.AmdPstatePolicy                = PcdGet8(PcdAmdAgesaPstatePolicy);
++  CcxData->CcxInputBlock.AmdSplitRmpTable               = PcdGet8(PcdAmdSplitRmpTable);
++  CcxData->CcxInputBlock.AmdReserved                    = 0xFF;
++  CcxData->CcxInputBlock.AmdCpuPauseDelay               = PcdGet8(PcdAmdCpuPauseDelay);
++
++  DEBUG ((DEBUG_INFO, "SIL Processor ID : 0x%x \n", CcxData->CcxOutputBlock.ProcessorId));
++
++
++  DEBUG ((DEBUG_INFO, "SIL Processor ID : 0x%x \n", CcxData->CcxOutputBlock.ProcessorId));
++  // this loop is used find the exact Microcode of the running Processor chip
++  // from Microcode block on the BSP
++  while (MicrocodeAddFound == FALSE)
++  {
++    //Read the patch id from the Microcode block on the BSP
++    UcodeBIOSEntryInfoStatus = BIOSEntryInfo(UCODE_PATCH, InstanceNumber, NULL, &UcodeEntryAddress,
++                                              &UcodeEntrySize, NULL);
++    InstanceNumber ++;
++    if (UcodeBIOSEntryInfoStatus == TRUE) {
++      MicroCode = (MPB *)(size_t)UcodeEntryAddress;
++      // compare with running Microprocessor patch ID.
++	  if(MicroCode->MPB_REVISION.ProcessorRevisionID == CcxData->CcxOutputBlock.ProcessorId)
++	  {
++        //Update Valid Micrcode Info of the running Microprocessor
++		MicrocodeAddFound = TRUE;
++        CcxData->CcxInputBlock.UcodePatchEntryInfo.UcodePatchEntryAddress = UcodeEntryAddress;
++        CcxData->CcxInputBlock.UcodePatchEntryInfo.UcodePatchEntrySize    = UcodeEntrySize;
++        DEBUG ((DEBUG_INFO, "UcodePatch EntryAddress=%x\n",
++                    CcxData->CcxInputBlock.UcodePatchEntryInfo.UcodePatchEntryAddress));
++        DEBUG ((DEBUG_INFO, "UcodePatch EntrySize=%x\n",
++                    CcxData->CcxInputBlock.UcodePatchEntryInfo.UcodePatchEntrySize));
++	  } else {
++        DEBUG ((DEBUG_INFO, "Microcode Info =%x,%x\n",
++                    UcodeEntryAddress,MicroCode->MPB_REVISION));
++	  }
++    } else {
++      MicrocodeAddFound = TRUE;
++      DEBUG ((DEBUG_ERROR, "Fail to get the UcodePatch BiosEntry status =%x\n",UcodeBIOSEntryInfoStatus));
++    }
++  }
++  return EFI_SUCCESS;
++}
++
++/**
++ * UpdateEnCoreLimitInHob
++ *
++ * @brief Update Core Limit value into Host Specified Memory location using HOB Method
++ *
++ * @param EnCoreLimit Ccx Core Count Value
++ *
++ * @return EFI_SUCCESS or EFI_NOT_FOUND
++ *       EFI_SUCCESS   : Host able to create Guid type memory block using HOB
++ *       EFI_NOT_FOUND : Hob create unsuccessful
++ */
++static EFI_STATUS
++UpdateEnCoreLimitInHob (
++  uint32_t EnCoreLimit
++  )
++{
++  EFI_HOB_GUID_TYPE *Hob;
++  EFI_STATUS Status;
++
++  Status = PeiServicesCreateHob (
++  EFI_HOB_TYPE_GUID_EXTENSION,
++  (uint16_t)(sizeof(EFI_HOB_GUID_TYPE) + sizeof(uint32_t)),
++  (void **)&Hob);
++  ASSERT_EFI_ERROR (Status);
++
++  CopyMem(&Hob->Name, &gPeiOpenSilCcxDownCoreDataGuid, sizeof(EFI_GUID));
++  Hob++;
++  CopyMem (Hob, (uint32_t *)&EnCoreLimit, sizeof(uint32_t));
++
++  return Status;
++}
++
++/**
++ * CcxDataBackToHostFW
++ *
++ * @brief Send Updated Ccx IP blocks Data to host FW
++ * @return EFI_SUCCESS or EFI_NOT_FOUND
++ *       EFI_SUCCESS   : Received valid address within the Host allocated memory block
++ *                       and succesfully update the PCD.
++ *       EFI_NOT_FOUND : Indicates the requested block was not found
++ */
++EFI_STATUS
++CcxDataBackToHostFW (
++  void
++  )
++{
++  EFI_STATUS Status;
++  CCXCLASS_DATA_BLK *CcxDataHostFw;
++
++  CcxDataHostFw = (CCXCLASS_DATA_BLK *)SilFindStructure (SilId_CcxClass,  0);
++  DEBUG ((DEBUG_ERROR, "CcxDataBackToHostFW SIL Ccx memory block at: 0x%x \n", CcxDataHostFw));
++  if (CcxDataHostFw == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  Status = PcdSet8S(PcdAmdDownCoreMode,CcxDataHostFw->CcxInputBlock.AmdDownCoreMode);
++  DEBUG ((DEBUG_ERROR, "PcdAmdDownCoreMode update: %d\n", Status));
++  Status = PcdSet8S(PcdAmdApicMode,CcxDataHostFw->CcxInputBlock.AmdApicMode);
++  DEBUG ((DEBUG_ERROR, "PcdAmdApicMode update: %d\n", Status));
++  Status = PcdSetBoolS(PcdAmdAcpiS3Support,CcxDataHostFw->CcxOutputBlock.AmdAcpiS3Support);
++  DEBUG ((DEBUG_ERROR, "PcdAmdAcpiS3Support update: %d\n", Status));
++  Status = UpdateEnCoreLimitInHob(CcxDataHostFw->CcxOutputBlock.AmdCcxCoreCount);
++  DEBUG ((DEBUG_ERROR, "UpdateEnCoreLimitInHob Status: %d\n", Status));
++
++  return EFI_SUCCESS;
++}
+diff --git a/Platform/Capri2-Genoa/Pei/CxlDataInit.c b/Platform/Capri2-Genoa/Pei/CxlDataInit.c
+new file mode 100644
+index 0000000..ca81a9c
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/CxlDataInit.c
+@@ -0,0 +1,89 @@
++/**
++ * @file  CxlDataInit.c
++ * @brief Initialize Cxl data prior to openSIL execution.
++ *
++ */
++/**
++ * Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++ *
++ */
++
++#include <stdint.h>
++#include <stdbool.h>
++#include <stddef.h>
++#include <PiPei.h>
++#include <Library/DebugLib.h>
++#include <Library/PcdLib.h>
++#include <xSIM-api.h>
++#include <Cxl/CxlClass-api.h>
++
++/**
++ * SetCxlData
++ *
++ * @brief Set the CXL input defaults
++ * @details
++ *      Locate the CXL - the resource initialization IP block
++ * @return EFI_SUCCESS or EFI_DEVICE_ERROR
++ */
++EFI_STATUS
++SetCxlData (
++  void
++  )
++{
++  CXLCLASS_DATA_BLK            *CxlData;
++  
++  CxlData = (CXLCLASS_DATA_BLK *)SilFindStructure (SilId_CxlClass,  0);
++  DEBUG ((DEBUG_ERROR, "SIL CXL memory block is found at: 0x%x \n", CxlData));
++  if (CxlData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  CxlData->CxlInputBlock.ReportErrorsToRcec                  = PcdGetBool (PcdReportErrorsToRcec);
++  CxlData->CxlInputBlock.CxlIoArbWeights                     = PcdGet8 (PcdCxlIoArbWeights);
++  CxlData->CxlInputBlock.CxlCaMemArbWeights                  = PcdGet8 (PcdCxlCaMemArbWeights);
++  CxlData->CxlInputBlock.CnliTokenAdvertisement              = PcdGet8 (PcdCnliTokenAdvertisement);
++  CxlData->CxlInputBlock.AmdCxlProtocolErrorReporting        = PcdGet8 (PcdAmdCxlProtocolErrorReporting);
++  CxlData->CxlInputBlock.AmdPcieAerReportMechanism           = PcdGet8 (PcdAmdPcieAerReportMechanism);
++  CxlData->CxlInputBlock.CxlCamemRxOptimization              = PcdGetBool (PcdCxlCamemRxOptimization);
++  CxlData->CxlInputBlock.CxlTxOptimizeDirectOutEn            = PcdGetBool (PcdCxlTxOptimizeDirectOutEn);
++
++  DEBUG ((DEBUG_INFO, "SIL CXL PCD ReportErrorsToRcec: 0x%x \n", CxlData->CxlInputBlock.ReportErrorsToRcec));
++  DEBUG ((DEBUG_INFO, "SIL CXL PCD CxlIoArbWeights: 0x%x \n", CxlData->CxlInputBlock.CxlIoArbWeights));
++  DEBUG ((DEBUG_INFO, "SIL CXL PCD CxlCaMemArbWeights: 0x%x \n", CxlData->CxlInputBlock.CxlCaMemArbWeights));
++  DEBUG ((DEBUG_INFO, "SIL CXL PCD CnliTokenAdvertisement: 0x%x \n", CxlData->CxlInputBlock.CnliTokenAdvertisement));
++  DEBUG ((DEBUG_INFO, "SIL CXL PCD AmdCxlProtocolErrorReporting: 0x%x \n", CxlData->CxlInputBlock.AmdCxlProtocolErrorReporting));
++  DEBUG ((DEBUG_INFO, "SIL CXL PCD AmdPcieAerReportMechanism: 0x%x \n", CxlData->CxlInputBlock.AmdPcieAerReportMechanism));
++  DEBUG ((DEBUG_INFO, "SIL CXL PCD CxlCamemRxOptimization: 0x%x \n", CxlData->CxlInputBlock.CxlCamemRxOptimization));
++  DEBUG ((DEBUG_INFO, "SIL CXL PCD CxlTxOptimizeDirectOutEn: 0x%x \n", CxlData->CxlInputBlock.CxlTxOptimizeDirectOutEn));
++
++  return EFI_SUCCESS;
++}
++
++/**
++ * CxlDataBackToHostFW
++ *
++ * @brief Send Updated CXL IP block's data to host FW
++ * @return EFI_SUCCESS or EFI_NOT_FOUND
++ *       EFI_SUCCESS   : Received valid address within the Host allocated memory block 
++ *                       and succesfully update the PCD.
++ *       EFI_NOT_FOUND : Indicates the requested block was not found
++ */
++EFI_STATUS
++CxlDataBackToHostFW (
++  void
++  )
++{
++  EFI_STATUS status;
++  CXLCLASS_DATA_BLK *CxlDataHostFw;
++
++  CxlDataHostFw = (CXLCLASS_DATA_BLK *)SilFindStructure (SilId_CxlClass,  0);
++  DEBUG ((DEBUG_ERROR, "CxlDataBackToHostFW SIL CXL memory block at: 0x%x \n", CxlDataHostFw));
++  if (CxlDataHostFw == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  status = PcdSet8S(PcdAmdPcieAerReportMechanism, CxlDataHostFw->CxlOutputBlock.AmdPcieAerReportMechanism);
++  DEBUG ((DEBUG_ERROR, "PcdAmdPcieAerReportMechanism update: %d\n", status));
++
++  return EFI_SUCCESS;
++}
+diff --git a/Platform/Capri2-Genoa/Pei/FchDataInit.c b/Platform/Capri2-Genoa/Pei/FchDataInit.c
+new file mode 100644
+index 0000000..c55d6a2
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/FchDataInit.c
+@@ -0,0 +1,359 @@
++/* Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved. */
++/**
++ * @file  NbioDataInit.c
++ * @brief Initialize NBIO data prior to openSIL execution.
++ *
++ */
++#include <Library/DebugLib.h>
++#include <Library/PcdLib.h>
++#include <FCH/Common/FchCommonCfg.h>
++#include "string.h"
++#define FEATURE_CPPC_MASK                    (1 << 22)
++#define FCH_SATA_CONTROLLER_NUM          4
++
++/**
++ * SetFchHwAcpiData
++ * @brief Establish FCH HwAcpi input
++ *
++ * @retval SIL_STATUS
++ */
++EFI_STATUS
++SetFchHwAcpiData (
++  void
++  )
++{
++  FCHHWACPI_INPUT_BLK *FchHwAcpiData;
++
++  FchHwAcpiData = (FCHHWACPI_INPUT_BLK *)SilFindStructure (SilId_FchHwAcpiP,  0);
++  DEBUG ((DEBUG_ERROR, "SIL Fch HwAcpi memory block is found at: 0x%x \n", FchHwAcpiData));
++  if (FchHwAcpiData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  FchHwAcpiData->I2c0SdaHold           = PcdGet32 (PcdAmdFchI2c0SdaHold);
++  FchHwAcpiData->I2c1SdaHold           = PcdGet32 (PcdAmdFchI2c1SdaHold);
++  FchHwAcpiData->I2c2SdaHold           = PcdGet32 (PcdAmdFchI2c2SdaHold);
++  FchHwAcpiData->I2c3SdaHold           = PcdGet32 (PcdAmdFchI2c3SdaHold);
++  FchHwAcpiData->I2c4SdaHold           = PcdGet32 (PcdAmdFchI2c4SdaHold);
++  FchHwAcpiData->I2c5SdaHold           = PcdGet32 (PcdAmdFchI2c5SdaHold);
++  FchHwAcpiData->SpreadSpectrum        = PcdGetBool (PcdSpreadSpectrum);
++  FchHwAcpiData->PwrFailShadow         = PcdGet8 (PcdPwrFailShadow);
++  FchHwAcpiData->StressResetMode       = PcdGet8 (PcdStressResetMode);
++  FchHwAcpiData->NoClearThermalTripSts = PcdGetBool (PcdNoClearThermalTripSts);
++  FchHwAcpiData->FchAlinkRasSupport    = PcdGetBool (PcdAmdFchAlinkRasSupport);
++  FchHwAcpiData->SpdHostCtrlRelease    = PcdGetBool (PcdAmdFchSpdHostCtrlRelease);
++  FchHwAcpiData->BootTimerEnable       = PcdGetBool (PcdBootTimerEnable);
++  FchHwAcpiData->BootTimerResetType    = PcdGet8 (PcdBootTimerResetType);
++  FchHwAcpiData->ToggleAllPwrGoodOnCf9 = PcdGetBool (PcdToggleAllPwrGoodOnCf9);
++  FchHwAcpiData->OemProgrammingTablePtr = PcdGetPtr (PcdOemProgrammingTablePtr);//???
++
++  return EFI_SUCCESS;
++}
++
++/**
++ * SetFchUsbData
++ * @brief Establish FCH HwAcpi input
++ *
++ * @retval SIL_STATUS
++ */
++EFI_STATUS
++SetFchUsbData (
++  void
++  )
++{
++  FCHUSB_INPUT_BLK *FchUsbData;
++
++  FchUsbData = (FCHUSB_INPUT_BLK *)SilFindStructure (SilId_FchUsb,  0);
++  DEBUG ((DEBUG_ERROR, "SIL Fch USB memory block is found at: 0x%x \n", FchUsbData));
++  if (FchUsbData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  FchUsbData->Xhci0Enable                    = PcdGetBool (PcdXhci0Enable);
++  FchUsbData->Xhci1Enable                    = PcdGetBool (PcdXhci1Enable);
++  FchUsbData->XhciSsid                       = PcdGet32 (PcdXhciSsid);
++  FchUsbData->Xhci0DevRemovable              = PcdGet32 (PcdXhci0DevRemovable);
++  FchUsbData->DisableXhciPortLate            = PcdGetBool (PcdDisableXhciPortLate);
++  FchUsbData->XhciUsb3PortDisable            = PcdGet32 (PcdXhciUsb3PortDisable);
++  FchUsbData->XhciUsb2PortDisable            = PcdGet32 (PcdXhciUsb2PortDisable);
++  FchUsbData->XhciOCpinSelect[0].Usb20OcPin  = (UINT32)PcdGet64 (PcdXhciUsb20OcPinSelect);
++  FchUsbData->XhciOCpinSelect[0].Usb31OcPin  = (UINT16)PcdGet32 (PcdXhciUsb31OcPinSelect);
++  FchUsbData->XhciOCpinSelect[1].Usb20OcPin  = (UINT32)RShiftU64 (PcdGet64 (PcdXhciUsb20OcPinSelect), 8);
++  FchUsbData->XhciOCpinSelect[1].Usb31OcPin  = (UINT16)(PcdGet32 (PcdXhciUsb31OcPinSelect) >> 8);
++  FchUsbData->XhciOcPolarityCfgLow           = PcdGetBool (PcdXhciOcPolarityCfgLow);
++  FchUsbData->Usb3PortForceGen1              = PcdGet8 (PcdXhciForceGen1);
++  FchUsbData->UsbSparseModeEnable            = PcdGetBool (PcdUsbSparseModeEnable);
++
++  memcpy (&(FchUsbData->OemUsbConfigurationTable),
++    PcdGetPtr (PcdUsbGenoaOemConfigurationTable),
++    sizeof (FCH_USB_OEM_PLATFORM_TABLE));
++
++  return EFI_SUCCESS;
++}
++
++/**
++ * SetFchAbData
++ * @brief Establish FCH AB input
++ *
++ * @retval SIL_STATUS
++ */
++EFI_STATUS
++SetFchAbData (
++  void
++  )
++{
++  FCHAB_INPUT_BLK  *FchAbData;
++
++  FchAbData = (FCHAB_INPUT_BLK *)SilFindStructure (SilId_FchAb,  0);
++  DEBUG ((DEBUG_ERROR, "SIL Fch AB memory block is found at: 0x%x \n", FchAbData));
++  if (FchAbData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  FchAbData->AbClockGating                = PcdGet8 (PcdAbClockGating);
++  FchAbData->ALinkClkGateOff              = PcdGet8 (PcdALinkClkGateOff);
++  FchAbData->BLinkClkGateOff              = PcdGet8 (PcdBLinkClkGateOff);
++  FchAbData->SbgMemoryPowerSaving         = PcdGetBool (PcdSbgMemoryPowerSaving);
++  FchAbData->SbgClockGating               = PcdGetBool (PcdSbgClockGating);
++  FchAbData->XdmaDmaWrite16ByteMode       = PcdGetBool (PcdXdmaDmaWrite16ByteMode);
++  FchAbData->XdmaMemoryPowerSaving        = PcdGetBool (PcdXdmaMemoryPowerSaving);
++  FchAbData->XdmaPendingNprThreshold      = PcdGet8 (PcdXdmaPendingNprThreshold);
++  FchAbData->XdmaDncplOrderDis            = PcdGetBool (PcdXdmaDncplOrderDis);
++  FchAbData->SdphostBypassDataPack        = PcdGetBool (PcdSdphostBypassDataPack);
++  FchAbData->SdphostDisNpmwrProtect       = PcdGetBool (PcdSdphostDisNpmwrProtect);
++  if (PcdGetBool (PcdResetCpuOnSyncFlood) && (!PcdGetBool (PcdSyncFloodToApml))) {
++    FchAbData->ResetCpuOnSyncFlood        = TRUE;
++  } else {
++    FchAbData->ResetCpuOnSyncFlood        = FALSE;
++  }
++
++  return EFI_SUCCESS;
++}
++
++/**
++ * SetFchSataData
++ * @brief Establish FCH Sata input
++ *
++ * @retval SIL_STATUS
++ */
++EFI_STATUS
++SetFchSataData (
++  void
++  )
++{
++  uint8_t  SataController;
++  uint8_t  SataEnable2;
++  uint8_t  SataSgpioEnable;
++  uint64_t SataRxPolarity;
++  uint64_t SataEspEnable;
++  uint64_t SataPortShutdown;
++  uint64_t SataPortMode;
++  FCHSATA_INPUT_BLK  *FchSataData;
++
++  FchSataData = (FCHSATA_INPUT_BLK *)SilFindStructure (SilId_FchSata,  0);
++  DEBUG ((DEBUG_ERROR, "SIL Fch SATA memory block is found at: 0x%x \n", FchSataData));
++  if (FchSataData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  if (PcdGetBool (PcdSataEnable)) {
++    SataEnable2      = PcdGet8 (PcdSataEnable2);
++    SataRxPolarity   = PcdGet64 (PcdSataMultiDiePortRxPolarity);
++    SataEspEnable    = PcdGet64 (PcdSataMultiDiePortESP);
++    SataPortShutdown = PcdGet64 (PcdSataMultiDiePortShutDown);
++    SataPortMode     = PcdGet64 (PcdSataIoDie0PortMode);
++    SataSgpioEnable  = PcdGet8 (PcdSataSgpioMultiDieEnable);
++
++    for (SataController = 0; SataController < FCH_SATA_CONTROLLER_NUM; SataController++) {
++      if (SataEnable2 & (1 << SataController)) {
++        FchSataData[SataController].SataEnable = true;
++      } else {
++        FchSataData[SataController].SataEnable = false;
++      }
++    }
++
++    //Sata controller
++    for (SataController = 0; SataController < FCH_SATA_CONTROLLER_NUM;
++      SataController++) {
++      if (FchSataData[SataController].SataEnable) {
++        FchSataData[SataController].SataSetMaxGen2              = PcdGetBool (PcdSataSetMaxGen2);
++        FchSataData[SataController].SataClass                   = PcdGet8 (PcdSataClass);
++        FchSataData[SataController].SataAggrLinkPmCap           = PcdGet8 (PcdSataAggrLinkPmCap);
++        FchSataData[SataController].SataPortMultCap             = PcdGet8 (PcdSataPortMultCap);
++        FchSataData[SataController].SataPscCap                  = PcdGet8 (PcdSataPscCap);
++        FchSataData[SataController].SataSscCap                  = PcdGet8 (PcdSataSscCap);
++        FchSataData[SataController].SataClkAutoOff              = PcdGet8 (PcdSataClkAutoOff);
++        FchSataData[SataController].SataFisBasedSwitching       = PcdGet8 (PcdSataFisBasedSwitching);
++        FchSataData[SataController].SataCccSupport              = PcdGet8 (PcdSataCccSupport);
++        FchSataData[SataController].SataDisableGenericMode      = PcdGet8 (PcdSataDisableGenericMode);
++        FchSataData[SataController].SataTargetSupport8Device    = PcdGet8 (PcdSataTargetSupport8Device);
++        FchSataData[SataController].SataAhciEnclosureManagement = PcdGet8 (PcdSataAhciEnclosureManagement);
++        FchSataData[SataController].SataMsiEnable               = PcdGetBool (PcdSataMsiEnable);
++        FchSataData[SataController].SataRasSupport              = PcdGetBool (PcdSataRasSupport);
++        FchSataData[SataController].SataAhciDisPrefetchFunction = PcdGetBool (PcdSataAhciDisPrefetchFunction);
++        FchSataData[SataController].SataAhciSsid                = PcdGet32 (PcdSataAhciSsid);
++        FchSataData[SataController].SataRaid5Ssid               = PcdGet32 (PcdSataRaid5Ssid);
++        FchSataData[SataController].SataRaidSsid                = PcdGet32 (PcdSataRaidSsid);
++        FchSataData[SataController].SataDevSlpPort0             = PcdGetBool (PcdSataDevSlpPort0);
++        FchSataData[SataController].SataDevSlpPort1             = PcdGetBool (PcdSataDevSlpPort1);
++        FchSataData[SataController].SataDevSlpPort0Num          = PcdGet8 (PcdSataDevSlpPort0Num);
++        FchSataData[SataController].SataDevSlpPort1Num          = PcdGet8 (PcdSataDevSlpPort1Num);
++        FchSataData[SataController].SataSgpio0                  = PcdGet8 (PcdSataSgpio0);
++        FchSataData[SataController].SataControllerAutoShutdown  = PcdGetBool (PcdSataControllerAutoShutdown);
++
++        FchSataData[SataController].SataEspPort    = (uint8_t)(SataEspEnable >> (8 * SataController));
++        FchSataData[SataController].SataPortPower  = (uint8_t)(SataPortShutdown >> (8 * SataController));
++        FchSataData[SataController].SataPortMd     = (uint16_t)(SataPortMode >> (16 * SataController));
++        FchSataData[SataController].SataSgpio0     = (uint8_t)((SataSgpioEnable >> SataController) & BIT_32(0));
++        FchSataData[SataController].SataRxPolarity = (uint8_t) (SataRxPolarity >> (8 * SataController));
++        FchSataData[SataController].SataBISTLComplianceMode = PcdGet8 (PcdSataBISTLComplianceMode);
++      }
++    }
++  } else {
++    PcdSet8S (PcdSataEnable2, 0);
++  }
++
++  return EFI_SUCCESS;
++}
++
++/**
++ * SetFchSpiData
++ * @brief Establish FCH SPI input
++ *
++ * @retval SIL_STATUS
++ */
++EFI_STATUS
++SetFchSpiData (
++  void
++  )
++{
++  FCHSPI_INPUT_BLK  *FchSpiData;
++
++  FchSpiData = (FCHSPI_INPUT_BLK *)SilFindStructure (SilId_FchSpi,  0);
++  DEBUG ((DEBUG_ERROR, "SIL Fch SPI memory block is found at: 0x%x \n", FchSpiData));
++  if (FchSpiData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  FchSpiData->LpcEnable                  = PcdGetBool (PcdLpcEnable);
++  FchSpiData->LpcClk0                    = PcdGetBool (PcdLpcClk0);
++  FchSpiData->LpcClk1                    = PcdGetBool (PcdLpcClk1);
++  FchSpiData->LpcSsid                    = PcdGet32 (PcdLpcSsid);
++  FchSpiData->SpiSpeed                   = PcdGet8 (PcdResetSpiSpeed);
++  FchSpiData->WriteSpeed                 = PcdGet8 (PcdResetWriteSpeed);
++  FchSpiData->SpiTpmSpeed                = PcdGet8 (PcdResetSpiTpmSpeed);
++
++  return EFI_SUCCESS;
++}
++
++/**
++ * SetFchData
++ * @brief Establish FCH input
++ *
++ * @retval SIL_STATUS
++ */
++EFI_STATUS
++SetFchData (
++  void
++  )
++{
++  uint8_t     UartLegacy[4];
++  uint16_t    IoEnable16;
++  uint16_t    UartChannel;
++  FCHCLASS_INPUT_BLK *FchData;
++  EFI_STATUS Status;
++
++  FchData = (FCHCLASS_INPUT_BLK *)SilFindStructure (SilId_FchClass,  0);
++  DEBUG ((DEBUG_ERROR, "SIL Fch Class memory block is found at: 0x%x \n", FchData));
++  if (FchData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  FchData->FchBldCfg.CfgSmbus0BaseAddress = PcdGet16 (PcdAmdFchCfgSmbus0BaseAddress);
++  FchData->FchBldCfg.CfgSioPmeBaseAddress = PcdGet16 (PcdAmdFchCfgSioPmeBaseAddress);
++  FchData->FchBldCfg.CfgAcpiPm1EvtBlkAddr = PcdGet16 (PcdAmdFchCfgAcpiPm1EvtBlkAddr);
++  FchData->FchBldCfg.CfgAcpiPm1CntBlkAddr = PcdGet16 (PcdAmdFchCfgAcpiPm1CntBlkAddr);
++  FchData->FchBldCfg.CfgAcpiPmTmrBlkAddr  = PcdGet16 (PcdAmdFchCfgAcpiPmTmrBlkAddr);
++  FchData->FchBldCfg.CfgCpuControlBlkAddr = PcdGet16 (PcdAmdFchCfgCpuControlBlkAddr);
++  FchData->FchBldCfg.CfgAcpiGpe0BlkAddr   = PcdGet16 (PcdAmdFchCfgAcpiGpe0BlkAddr);
++  FchData->FchBldCfg.CfgSmiCmdPortAddr    = PcdGet16 (PcdAmdFchCfgSmiCmdPortAddr);
++
++  FchData->LegacyFree                    = PcdGetBool (PcdLegacyFree);
++  FchData->FchOscout1ClkContinous        = PcdGetBool (PcdFchOscout1ClkContinous);
++  FchData->LpcClockDriveStrength         = PcdGet8 (PcdLpcClockDriveStrength);
++  FchData->LpcClockDriveStrengthRiseTime = PcdGet8 (PcdLpcClockDriveStrengthRiseTime);
++  FchData->LpcClockDriveStrengthFallTime = PcdGet8 (PcdLpcClockDriveStrengthFallTime);
++  FchData->WdtEnable                     = PcdGetBool (PcdFchWdtEnable);
++  FchData->SerialIrqEnable               = PcdGetBool (PcdSerialIrqEnable);
++  FchData->FchIoApicId                   = PcdGet8 (PcdCfgFchIoapicId);
++  FchData->FchAsfCfg.DisableSecondary        = PcdGetBool (PcdAmdFchDisableAsfSecondary);
++
++  FchData->Hpet.HpetEnable               = PcdGetBool (PcdHpetEnable);
++  FchData->Hpet.HpetMsiDis               = PcdGetBool (PcdHpetMsiDis);
++  FchData->Hpet.HpetBase                 = 0xFED00000;
++
++  FchData->Gcpu.TimerTickTrack           = PcdGet8 (PcdTimerTickTrack);
++  FchData->Gcpu.ClockInterruptTag        = PcdGet8 (PcdClockInterruptTag);
++
++  FchData->Misc.NoneSioKbcSupport        = PcdGetBool (PcdNoneSioKbcSupport);
++  FchData->Misc.NativePcieSupport        = PcdGetBool (PcdNativePcieSupport);
++  FchData->Misc.Cppc.CppcSupport         = FALSE;
++
++
++
++  FchData->FchRunTime.FchDeviceEnableMap = PcdGet32 (FchRTDeviceEnableMap);
++  FchData->FchRunTime.PcieMmioBase       = (UINT32) PcdGet64 (PcdPciExpressBaseAddress);
++  if (FchData->FchRunTime.FchDeviceEnableMap & BIT_32(11)) {
++    UartLegacy[0] = PcdGet8 (FchUart0LegacyEnable);;
++  } else {
++    UartLegacy[0] = 0;
++  }
++  if (FchData->FchRunTime.FchDeviceEnableMap & BIT_32(12)) {
++    UartLegacy[1] = PcdGet8 (FchUart1LegacyEnable);;
++  } else {
++    UartLegacy[1] = 0;
++  }
++  if (FchData->FchRunTime.FchDeviceEnableMap & BIT_32(16)) {
++    UartLegacy[2] = PcdGet8 (FchUart2LegacyEnable);;
++  } else {
++    UartLegacy[2] = 0;
++  }
++  if (FchData->FchRunTime.FchDeviceEnableMap & BIT_32(26)) {
++    UartLegacy[3] = PcdGet8 (FchUart3LegacyEnable);;
++  } else {
++    UartLegacy[3] = 0;
++  }
++
++  IoEnable16 = 0;
++  for (UartChannel = 0; UartChannel < 4; UartChannel++ ) {
++    if (UartLegacy[UartChannel]) {
++      IoEnable16 |= (BIT_32(0) << (UartLegacy[UartChannel] - 1)) +
++        (UartChannel << (8 + ((UartLegacy[UartChannel] - 1) * 2)));
++    }
++  }
++
++  FchData->FchRunTime.Al2AhbLegacyUartIoEnable = IoEnable16;
++
++  FchData->Smbus.SmbusSsid               = PcdGet32 (PcdSmbusSsid);
++
++  FchData->FchReset.SataEnable           = PcdGetBool (PcdSataEnable);
++  FchData->SataSetMaxGen2                = PcdGetBool (PcdSataSetMaxGen2);
++  FchData->SataClkMode                   = PcdGet8 (PcdSataClkMode);
++
++  Status = SetFchHwAcpiData ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetFchUsbData ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetFchAbData ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetFchSataData ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetFchSpiData ();
++  ASSERT_EFI_ERROR (Status);
++
++  return EFI_SUCCESS;
++}
+\ No newline at end of file
+diff --git a/Platform/Capri2-Genoa/Pei/MpioDataInit.c b/Platform/Capri2-Genoa/Pei/MpioDataInit.c
+new file mode 100644
+index 0000000..ccd921c
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/MpioDataInit.c
+@@ -0,0 +1,222 @@
++/**
++ * @file  MpioDataInit.c
++ * @brief Initialize Mpio data prior to openSIL execution.
++ *
++ */
++/**
++ * Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++ *
++ */
++
++#include <Library/DebugLib.h>
++#include <Library/PcdLib.h>
++#include <PiPei.h>
++#include <Library/BaseMemoryLib.h>
++#include <Sil-api.h>
++#include <Mpio/MpioClass-api.h>
++#include <Mpio/Common/MpioStructs.h>
++
++EFI_STATUS
++SetMpioConfig (
++  MPIOCLASS_INPUT_BLK           *MpioData
++);
++
++/**
++ * SetMpioData
++ *
++ * @brief Set the MPIO input defaults
++ * @details
++ *      Locate the MPIO - the resource initialization IP block
++ * @return EFI_SUCCESS or EFI_DEVICE_ERROR
++ */
++EFI_STATUS
++SetMpioData (
++  void
++  )
++{
++  EFI_STATUS                    Status;
++  MPIOCLASS_INPUT_BLK           *MpioData;
++
++  Status = EFI_INVALID_PARAMETER;
++
++  MpioData = (MPIOCLASS_INPUT_BLK *)SilFindStructure (SilId_MpioClass,  0);
++  DEBUG ((DEBUG_ERROR, "SIL MPIO memory block is found at: 0x%x \n", MpioData));
++  if (MpioData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  MpioData->CfgDxioClockGating                  = PcdGetBool (PcdCfgDxioClockGating);
++  MpioData->PcieDxioTimingControlEnable         = PcdGetBool (PcdPcieDxioTimingControlEnable);
++  MpioData->PCIELinkReceiverDetectionPolling    = PcdGet32 (PcdPCIELinkReceiverDetectionPolling);
++  MpioData->PCIELinkResetToTrainingTime         = PcdGet32 (PcdPCIELinkResetToTrainingTime);
++  MpioData->PCIELinkL0Polling                   = PcdGet32 (PcdPCIELinkL0Polling);
++  MpioData->PCIeExactMatchEnable                = PcdGetBool (PcdPCIeExactMatchEnable);
++  MpioData->DxioPhyValid                        = PcdGet8 (PcdDxioPhyValid);
++  MpioData->DxioPhyProgramming                  = PcdGet8 (PcdDxioPhyProgramming);
++  MpioData->CfgSkipPspMessage                   = PcdGet8 (PcdCfgSkipPspMessage);
++  MpioData->DxioSaveRestoreModes                = PcdGet8 (PcdDxioSaveRestoreModes);
++  MpioData->AmdAllowCompliance                  = PcdGet16 (PcdAmdAllowCompliance);
++  MpioData->SrisEnableMode                      = PcdGet8 (PcdSrisEnableMode);
++  MpioData->SrisSkipInterval                    = PcdGet8 (PcdSrisSkipInterval);
++  MpioData->SrisSkpIntervalSel                  = PcdGet8 (PcdSrisSkpIntervalSel);
++  MpioData->SrisCfgType                         = PcdGet8 (PcdSrisCfgType);
++  MpioData->SrisAutoDetectMode                  = PcdGet8 (PcdSrisAutoDetectMode);
++  MpioData->SrisAutodetectFactor                = PcdGet8 (PcdSrisAutodetectFactor);
++  MpioData->SrisLowerSkpOsGenSup                = PcdGet8 (PcdSrisLowerSkpOsGenSup);
++  MpioData->SrisLowerSkpOsRcvSup                = PcdGet8( PcdSrisLowerSkpOsRcvSup);
++  MpioData->AmdCxlOnAllPorts                    = PcdGetBool (PcdAmdCxlOnAllPorts);
++  MpioData->CxlCorrectableErrorLogging          = PcdGetBool (PcdCxlCorrectableErrorLogging);
++  MpioData->CxlUnCorrectableErrorLogging        = PcdGetBool (PcdCxlUnCorrectableErrorLogging);
++  // This is also available in Nbio. How to handle duplicate entries?
++  MpioData->CfgAEREnable                        = PcdGetBool (PcdCfgAEREnable);
++  MpioData->CfgMcCapEnable                      = PcdGetBool (PcdCfgMcCapEnable);
++  MpioData->CfgRcvErrEnable                     = PcdGetBool( PcdCfgRcvErrEnable);
++  // This is also available in Nbio. How to handle duplicate entries?
++  MpioData->EarlyBmcLinkTraining                = PcdGetBool (PcdEarlyBmcLinkTraining);
++  MpioData->EarlyBmcLinkSocket                  = PcdGet8 (PcdEarlyBmcLinkSocket);
++  MpioData->EarlyBmcLinkLaneNum                 = PcdGet8 (PcdEarlyBmcLinkLaneNum);
++  MpioData->EarlyBmcLinkDie                     = PcdGet8 (PcdEarlyBmcLinkDie);
++  MpioData->SurpriseDownFeature                 = PcdGetBool (PcdSurpriseDownFeature);
++  MpioData->LcMultAutoSpdChgOnLastRateEnable    = PcdGetBool (PcdLcMultAutoSpdChgOnLastRateEnable);
++  MpioData->AmdRxMarginEnabled                  = PcdGetBool (PcdAmdRxMarginEnabled);
++  MpioData->CfgPcieCVTestWA                     = PcdGet8 (PcdCfgPcieCVTestWA);
++  // This is also available in Nbio. How to handle duplicate entries?
++  MpioData->CfgPcieAriSupport                   = PcdGetBool (PcdCfgPcieAriSupport);
++  MpioData->CfgNbioCTOtoSC                      = PcdGetBool (PcdCfgNbioCTOtoSC);
++  MpioData->CfgNbioCTOIgnoreError               = PcdGetBool (PcdCfgNbioCTOIgnoreError);
++  MpioData->CfgNbioSsid                         = PcdGet32 (PcdCfgNbioSsid);
++  MpioData->CfgIommuSsid                        = PcdGet32 (PcdCfgIommuSsid);
++  MpioData->CfgPspccpSsid                       = PcdGet32 (PcdCfgPspccpSsid);
++  MpioData->CfgNtbccpSsid                       = PcdGet32 (PcdCfgNtbccpSsid);
++  MpioData->CfgNbifF0Ssid                       = PcdGet32 (PcdCfgNbifF0Ssid);
++  MpioData->CfgNtbSsid                          = PcdGet32 (PcdCfgNtbSsid);
++  MpioData->AmdPcieSubsystemDeviceID            = PcdGet16 (PcdAmdPcieSubsystemDeviceID);
++  MpioData->AmdPcieSubsystemVendorID            = PcdGet16 (PcdAmdPcieSubsystemVendorID);
++  MpioData->GppAtomicOps                        = PcdGet8 (PcdGppAtomicOps);
++  MpioData->GfxAtomicOps                        = PcdGet8 (PcdGfxAtomicOps);
++  MpioData->AmdNbioReportEdbErrors              = PcdGetBool (PcdAmdNbioReportEdbErrors);
++  // This is also available in Nbio. How to handle duplicate entries?
++  MpioData->OpnSpare                            = PcdGet32 (PcdOpnSpare);
++  MpioData->AmdPreSilCtrl0                      = PcdGet32 (PcdAmdPreSilCtrl0);
++  MpioData->MPIOAncDataSupport                  = PcdGetBool (PcdMPIOAncDataSupport);
++  MpioData->AfterResetDelay                     = PcdGet16 (PcdAfterResetDelay);
++  MpioData->CfgEarlyLink                        = PcdGetBool (PcdCfgEarlyLink);
++  MpioData->AmdCfgExposeUnusedPciePorts         = PcdGet8 (PcdAmdCfgExposeUnusedPciePorts);
++  MpioData->CfgForcePcieGenSpeed                = PcdGet8 (PcdCfgForcePcieGenSpeed);
++  MpioData->CfgSataPhyTuning                    = PcdGet8 (PcdCfgSataPhyTuning);
++  MpioData->PcieLinkComplianceModeAllPorts      = PcdGetBool (PcdPcieLinkComplianceModeAllPorts);
++  MpioData->AmdMCTPEnable                       = PcdGetBool (PcdAmdMCTPEnable);
++  MpioData->SbrBrokenLaneAvoidanceSup           = PcdGetBool (PcdSbrBrokenLaneAvoidanceSup);
++  MpioData->AutoFullMarginSup                   = PcdGetBool (PcdAutoFullMarginSup);
++  // A getter and setter, both are needed for this PCD.
++  MpioData->AmdPciePresetMask8GtAllPort         = PcdGet32 (PcdAmdPciePresetMask8GtAllPort);
++  // A getter and setter, both are needed for this PCD.
++  MpioData->AmdPciePresetMask16GtAllPort        = PcdGet32 (PcdAmdPciePresetMask16GtAllPort);
++  // A getter and setter, both are needed for this PCD.
++  MpioData->AmdPciePresetMask32GtAllPort        = PcdGet32 (PcdAmdPciePresetMask32GtAllPort);
++  MpioData->PcieLinkAspmAllPort                 = PcdGet8 (PcdPcieLinkAspmAllPort);
++  MpioData->SyncHeaderByPass                    = PcdGetBool (PcdSyncHeaderByPass);
++  MpioData->CxlTempGen5AdvertAltPtcl            = PcdGetBool (PcdCxlTempGen5AdvertAltPtcl);
++
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgDxioClockGating: 0x%x \n", MpioData->CfgDxioClockGating));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD PcieDxioTimingControlEnable: 0x%x \n", MpioData->PcieDxioTimingControlEnable));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD PCIELinkReceiverDetectionPolling: 0x%x \n", MpioData->PCIELinkReceiverDetectionPolling));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD PCIELinkResetToTrainingTime: 0x%x \n", MpioData->PCIELinkResetToTrainingTime));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD PCIELinkL0Polling: 0x%x \n", MpioData->PCIELinkL0Polling));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD PCIeExactMatchEnable: 0x%x \n", MpioData->PCIeExactMatchEnable));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD DxioPhyValid: 0x%x \n", MpioData->DxioPhyValid));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD DxioPhyProgramming: 0x%x \n", MpioData->DxioPhyProgramming));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgSkipPspMessage: 0x%x \n", MpioData->CfgSkipPspMessage));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD DxioSaveRestoreModes: 0x%x \n", MpioData->DxioSaveRestoreModes));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdAllowCompliance: 0x%x \n", MpioData->AmdAllowCompliance));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdHotPlugHandlingMode: 0x%x \n", MpioData->AmdHotPlugHandlingMode));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SrisEnableMode: 0x%x \n", MpioData->SrisEnableMode));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SrisSkipInterval: 0x%x \n", MpioData->SrisSkipInterval));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SrisSkpIntervalSel: 0x%x \n", MpioData->SrisSkpIntervalSel));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SrisCfgType: 0x%x \n", MpioData->SrisCfgType));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SrisAutoDetectMode: 0x%x \n", MpioData->SrisAutoDetectMode));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SrisAutodetectFactor: 0x%x \n", MpioData->SrisAutodetectFactor));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SrisLowerSkpOsGenSup: 0x%x \n", MpioData->SrisLowerSkpOsGenSup));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SrisLowerSkpOsRcvSup: 0x%x \n", MpioData->SrisLowerSkpOsRcvSup));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdCxlOnAllPorts: 0x%x \n", MpioData->AmdCxlOnAllPorts));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CxlCorrectableErrorLogging: 0x%x \n", MpioData->CxlCorrectableErrorLogging));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CxlUnCorrectableErrorLogging: 0x%x \n", MpioData->CxlUnCorrectableErrorLogging));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgAEREnable: 0x%x \n", MpioData->CfgAEREnable));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgMcCapEnable: 0x%x \n", MpioData->CfgMcCapEnable));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgRcvErrEnable: 0x%x \n", MpioData->CfgRcvErrEnable));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD EarlyBmcLinkTraining: 0x%x \n", MpioData->EarlyBmcLinkTraining));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD EarlyBmcLinkSocket: 0x%x \n", MpioData->EarlyBmcLinkSocket));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD EarlyBmcLinkLaneNum: 0x%x \n", MpioData->EarlyBmcLinkLaneNum));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SurpriseDownFeature: 0x%x \n", MpioData->SurpriseDownFeature));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD LcMultAutoSpdChgOnLastRateEnable: 0x%x \n", MpioData->LcMultAutoSpdChgOnLastRateEnable));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdRxMarginEnabled: 0x%x \n", MpioData->AmdRxMarginEnabled));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgPcieCVTestWA: 0x%x \n", MpioData->CfgPcieCVTestWA));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgPcieAriSupport: 0x%x \n", MpioData->CfgPcieAriSupport));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgNbioCTOtoSC: 0x%x \n", MpioData->CfgNbioCTOtoSC));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgNbioCTOIgnoreError: 0x%x \n", MpioData->CfgNbioCTOIgnoreError));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgNbioSsid: 0x%x \n", MpioData->CfgNbioSsid));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgIommuSsid: 0x%x \n", MpioData->CfgIommuSsid));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgPspccpSsid: 0x%x \n", MpioData->CfgPspccpSsid));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgNtbccpSsid: 0x%x \n", MpioData->CfgNtbccpSsid));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgNbifF0Ssid: 0x%x \n", MpioData->CfgNbifF0Ssid));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgNtbSsid: 0x%x \n", MpioData->CfgNtbSsid));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdPcieSubsystemDeviceID: 0x%x \n", MpioData->AmdPcieSubsystemDeviceID));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdPcieSubsystemVendorID: 0x%x \n", MpioData->AmdPcieSubsystemVendorID));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD GppAtomicOps: 0x%x \n", MpioData->GppAtomicOps));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD GfxAtomicOps: 0x%x \n", MpioData->GfxAtomicOps));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdNbioReportEdbErrors: 0x%x \n", MpioData->AmdNbioReportEdbErrors));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD OpnSpare: 0x%x \n", MpioData->OpnSpare));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdPreSilCtrl0: 0x%x \n", MpioData->AmdPreSilCtrl0));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD MPIOAncDataSupport: 0x%x \n", MpioData->MPIOAncDataSupport));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AfterResetDelay: 0x%x \n", MpioData->AfterResetDelay));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgEarlyLink: 0x%x \n", MpioData->CfgEarlyLink));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdCfgExposeUnusedPciePorts: 0x%x \n", MpioData->AmdCfgExposeUnusedPciePorts));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgForcePcieGenSpeed: 0x%x \n", MpioData->CfgForcePcieGenSpeed));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CfgSataPhyTuning: 0x%x \n", MpioData->CfgSataPhyTuning));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD PcieLinkComplianceModeAllPorts: 0x%x \n", MpioData->PcieLinkComplianceModeAllPorts));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdMCTPEnable: 0x%x \n", MpioData->AmdMCTPEnable));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SbrBrokenLaneAvoidanceSup: 0x%x \n", MpioData->SbrBrokenLaneAvoidanceSup));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AutoFullMarginSup: 0x%x \n", MpioData->AutoFullMarginSup));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdPciePresetMask8GtAllPort: 0x%x \n", MpioData->AmdPciePresetMask8GtAllPort));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdPciePresetMask16GtAllPort: 0x%x \n", MpioData->AmdPciePresetMask16GtAllPort));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdPciePresetMask32GtAllPort: 0x%x \n", MpioData->AmdPciePresetMask32GtAllPort));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD PcieLinkAspmAllPort: 0x%x \n", MpioData->PcieLinkAspmAllPort));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD AmdMCTPMasterID: 0x%x \n", MpioData->AmdMCTPMasterID));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD SyncHeaderByPass: 0x%x \n", MpioData->SyncHeaderByPass));
++  DEBUG ((DEBUG_INFO, "SIL MPIO PCD CxlTempGen5AdvertAltPtcl: 0x%x \n", MpioData->CxlTempGen5AdvertAltPtcl));
++
++  Status = SetMpioConfig(MpioData);
++
++  return Status;
++}
++
++/**
++ * MpioDataBackToHostFW
++ *
++ * @brief Send Updated MPIO IP block's data to host FW
++ * @return EFI_SUCCESS or EFI_NOT_FOUND
++ *       EFI_SUCCESS   : Received valid address within the Host allocated memory block
++ *                       and succesfully update the PCD.
++ *       EFI_NOT_FOUND : Indicates the requested block was not found
++ */
++EFI_STATUS
++MpioDataBackToHostFW (
++  void
++  )
++{
++  EFI_STATUS            Status;
++  MPIOCLASS_INPUT_BLK   *MpioDataHostFw;
++
++  MpioDataHostFw = (MPIOCLASS_INPUT_BLK *)SilFindStructure (SilId_MpioClass,  0);
++  DEBUG ((DEBUG_INFO, "MpioDataBackToHostFW SIL MPIO memory block at: 0x%x \n", MpioDataHostFw));
++  if (MpioDataHostFw == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  Status = PcdSet8S(PcdAmdMCTPMasterSeg, MpioDataHostFw->AmdMCTPMasterSeg);
++  DEBUG ((DEBUG_INFO, "PcdAmdMCTPMasterSeg update: %d\n", Status));
++  Status = PcdSet16S(PcdAmdMCTPMasterID, MpioDataHostFw->AmdMCTPMasterID);
++  DEBUG ((DEBUG_INFO, "PcdAmdMCTPMasterID update: %d\n", Status));
++
++  return Status;
++}
+diff --git a/Platform/Capri2-Genoa/Pei/NbioDataInit.c b/Platform/Capri2-Genoa/Pei/NbioDataInit.c
+new file mode 100644
+index 0000000..67ba5cb
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/NbioDataInit.c
+@@ -0,0 +1,120 @@
++/**
++ * @file  NbioDataInit.c
++ * @brief Initialize NBIO data prior to openSIL execution.
++ *
++ */
++/**
++ * Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++ *
++ */
++#include <Library/DebugLib.h>
++#include <Library/PcdLib.h>
++#include <Sil-api.h>
++#include <NBIO/NbioClass-api.h>
++
++/**
++ * NbioSetInputBlk
++ * @brief Establish NBIO input defaults
++ *
++ * @retval SIL_STATUS
++ */
++EFI_STATUS
++SetNbioData (
++  VOID
++  )
++{
++  NBIOCLASS_DATA_BLOCK *NbioData;
++
++  NbioData = (NBIOCLASS_DATA_BLOCK *)SilFindStructure (SilId_NbioClass,  0);
++  DEBUG ((DEBUG_INFO, "SIL NBIO memory block is found at: 0x%x \n", NbioData));
++  if (NbioData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  // Initialize NBIO input block with host configurations
++  NbioData->NbioInputBlk.CfgHdAudioEnable           = PcdGetBool (PcdCfgHdAudioEnable);
++  NbioData->NbioInputBlk.EsmEnableAllRootPorts      = PcdGetBool (PcdEsmEnableAllRootPorts);
++  NbioData->NbioInputBlk.EsmTargetSpeed             = PcdGet8 (PcdEsmTargetSpeed);
++  NbioData->NbioInputBlk.CfgRxMarginPersistenceMode = PcdGet8 (PcdCfgRxMarginPersistenceMode);
++  NbioData->NbioInputBlk.CfgDxioFrequencyVetting    = PcdGetBool (PcdCfgDxioFrequencyVetting);
++  NbioData->NbioInputBlk.CfgSkipPspMessage          = PcdGet8 (PcdCfgSkipPspMessage);
++  NbioData->NbioInputBlk.CfgEarlyTrainTwoPcieLinks  = PcdGetBool (PcdCfgEarlyTrainTwoPcieLinks);
++  NbioData->NbioInputBlk.EarlyBmcLinkTraining       = PcdGetBool (PcdEarlyBmcLinkTraining);
++  NbioData->NbioInputBlk.EarlyBmcLinkSocket         = PcdGet8 (PcdEarlyBmcLinkSocket);
++  NbioData->NbioInputBlk.EarlyBmcLinkLaneNum        = PcdGet8 (PcdEarlyBmcLinkLaneNum);
++  NbioData->NbioInputBlk.EarlyBmcLinkDie            = PcdGet8 (PcdEarlyBmcLinkDie);
++  NbioData->NbioInputBlk.EdpcEnable                 = PcdGet8 (PcdAmdEdpcEnable);
++  NbioData->NbioInputBlk.PcieAerReportMechanism     = PcdGet8 (PcdAmdPcieAerReportMechanism);
++  NbioData->NbioInputBlk.SevSnpSupport              = PcdGetBool (PcdCfgSevSnpSupport);
++
++  /// @todo : NBIO_CONFIG_DATA - Need to scrub these.  Some may not be used for Genoa
++  // Initiailize NBIO_CONFIG_DATA with host configurations
++  NbioData->NbioConfigData.IOHCClkGatingSupport = PcdGetBool (PcdIOHCClkGatingSupport);
++  NbioData->NbioConfigData.CfgNbifMgcgClkGating = PcdGetBool (PcdCfgNbifMgcgClkGating);
++  NbioData->NbioConfigData.CfgSstunlClkGating = PcdGetBool (PcdCfgSstunlClkGating);
++  NbioData->NbioConfigData.CfgSyshubMgcgClkGating = PcdGetBool (PcdCfgSyshubMgcgClkGating);
++  NbioData->NbioConfigData.TPHCompleterEnable = PcdGet8 (PcdTPHCompleterEnable);
++  NbioData->NbioConfigData.NbifMgcgHysteresis = PcdGet8 (PcdNbifMgcgHysteresis);
++  NbioData->NbioConfigData.SyshubMgcgHysteresis = PcdGet8 (PcdSyshubMgcgHysteresis);
++  NbioData->NbioConfigData.IohcNonPCIBarInitDbg = PcdGetBool (PcdCfgIohcNonPCIBarInitDbg);
++  NbioData->NbioConfigData.IohcNonPCIBarInitFastReg = PcdGetBool (PcdCfgIohcNonPCIBarInitFastReg);
++  NbioData->NbioConfigData.IohcNonPCIBarInitFastRegCtl = PcdGetBool (PcdCfgIohcNonPCIBarInitFastRegCtl);
++  NbioData->NbioConfigData.IommuMMIOAddressReservedEnable = PcdGetBool (PcdCfgIommuMMIOAddressReservedEnable);
++  NbioData->NbioConfigData.AmdApicMode = PcdGet8 (PcdAmdApicMode);
++  NbioData->NbioConfigData.IommuAvicSupport = PcdGetBool (PcdCfgIommuAvicSupport);
++  NbioData->NbioConfigData.IommuL2ClockGatingEnable = PcdGetBool (PcdIommuL2ClockGatingEnable);
++  NbioData->NbioConfigData.IommuL1ClockGatingEnable = PcdGetBool (PcdIommuL1ClockGatingEnable);
++  NbioData->NbioConfigData.IOHCPgEnable = PcdGetBool (PcdIOHCPgEnable);
++  NbioData->NbioConfigData.NbioGlobalCgOverride = PcdGet8 (PcdNbioGlobalCgOverride);
++  NbioData->NbioConfigData.IommuSupport = PcdGetBool (PcdCfgIommuSupport);
++  NbioData->NbioConfigData.CfgACSEnable = PcdGetBool (PcdCfgACSEnable);
++  NbioData->NbioConfigData.CfgPCIeLTREnable = PcdGetBool (PcdCfgPCIeLTREnable);
++  NbioData->NbioConfigData.CfgPcieAriSupport = PcdGetBool (PcdCfgPcieAriSupport);
++  NbioData->NbioConfigData.AmdMaskDpcCapability = PcdGetBool (PcdAmdMaskDpcCapability);
++  NbioData->NbioConfigData.PcieEcrcEnablement = PcdGetBool (PcdPcieEcrcEnablement);
++  NbioData->NbioConfigData.CfgAutoSpeedChangeEnable = PcdGet8 (PcdCfgAutoSpeedChangeEnable);
++  NbioData->NbioConfigData.EsmEnableAllRootPorts = PcdGetBool (PcdEsmEnableAllRootPorts);
++  NbioData->NbioConfigData.EsmTargetSpeed = PcdGet8 (PcdEsmTargetSpeed);
++  NbioData->NbioConfigData.CfgRxMarginPersistenceMode = PcdGet8 (PcdCfgRxMarginPersistenceMode);
++  NbioData->NbioConfigData.CfgSriovEnDev0F1 = PcdGetBool (PcdCfgSriovEnDev0F1);
++  NbioData->NbioConfigData.CfgAriEnDev0F1 = PcdGetBool (PcdCfgAriEnDev0F1);
++  NbioData->NbioConfigData.CfgAerEnDev0F1 = PcdGetBool (PcdCfgAerEnDev0F1);
++  NbioData->NbioConfigData.CfgAcsEnDev0F1 = PcdGetBool (PcdCfgAcsEnDev0F1);
++  NbioData->NbioConfigData.CfgAtsEnDev0F1 = PcdGetBool (PcdCfgAtsEnDev0F1);
++  NbioData->NbioConfigData.CfgPasidEnDev0F1 = PcdGetBool (PcdCfgPasidEnDev0F1);
++  NbioData->NbioConfigData.CfgPwrEnDev0F1 = PcdGetBool (PcdCfgPwrEnDev0F1);
++  NbioData->NbioConfigData.CfgRtrEnDev0F1 = PcdGetBool (PcdCfgRtrEnDev0F1);
++  NbioData->NbioConfigData.CfgPriEnDev0F1 = PcdGetBool (PcdCfgPriEnDev0F1);
++  NbioData->NbioConfigData.AtcEnable = PcdGetBool (PcdAtcEnable);
++  NbioData->NbioConfigData.AcsEnRccDev0 = PcdGetBool (PcdAcsEnRccDev0);
++  NbioData->NbioConfigData.AerEnRccDev0 = PcdGetBool (PcdAerEnRccDev0);
++  NbioData->NbioConfigData.AcsSourceValStrap5 = PcdGetBool (PcdAcsSourceValStrap5);
++  NbioData->NbioConfigData.AcsTranslationalBlockingStrap5 = PcdGetBool (PcdAcsTranslationalBlockingStrap5);
++  NbioData->NbioConfigData.AcsP2pReqStrap5 = PcdGetBool (PcdAcsP2pReqStrap5);
++  NbioData->NbioConfigData.AcsP2pCompStrap5 = PcdGetBool (PcdAcsP2pCompStrap5);
++  NbioData->NbioConfigData.AcsUpstreamFwdStrap5 = PcdGetBool (PcdAcsUpstreamFwdStrap5);
++  NbioData->NbioConfigData.AcsP2PEgressStrap5 = PcdGetBool (PcdAcsP2PEgressStrap5);
++  NbioData->NbioConfigData.AcsDirectTranslatedStrap5 = PcdGetBool (PcdAcsDirectTranslatedStrap5);
++  NbioData->NbioConfigData.AcsSsidEnStrap5 = PcdGetBool (PcdAcsSsidEnStrap5);
++  NbioData->NbioConfigData.DlfEnStrap1 = PcdGetBool (PcdDlfEnStrap1);
++  NbioData->NbioConfigData.Phy16gtStrap1 = PcdGetBool (PcdPhy16gtStrap1);
++  NbioData->NbioConfigData.MarginEnStrap1 = PcdGetBool (PcdMarginEnStrap1);
++  NbioData->NbioConfigData.PriEnPageReq = PcdGetBool (PcdPriEnPageReq);
++  NbioData->NbioConfigData.PriResetPageReq = PcdGetBool (PcdPriResetPageReq);
++  NbioData->NbioConfigData.AcsSourceVal = PcdGetBool (PcdAcsSourceVal);
++  NbioData->NbioConfigData.AcsTranslationalBlocking = PcdGetBool (PcdAcsTranslationalBlocking);
++  NbioData->NbioConfigData.AcsP2pReq = PcdGetBool (PcdAcsP2pReq);
++  NbioData->NbioConfigData.AcsP2pComp = PcdGetBool (PcdAcsP2pComp);
++  NbioData->NbioConfigData.AcsUpstreamFwd = PcdGetBool (PcdAcsUpstreamFwd);
++  NbioData->NbioConfigData.AcsP2PEgress = PcdGetBool (PcdAcsP2PEgress);
++  NbioData->NbioConfigData.RccDev0E2EPrefix = PcdGetBool (PcdRccDev0E2EPrefix);
++  NbioData->NbioConfigData.RccDev0ExtendedFmtSupported = PcdGetBool (PcdRccDev0ExtendedFmtSupported);
++  NbioData->NbioConfigData.DlfCapEn = PcdGetBool (PcdAmdDlfCapEn);
++  NbioData->NbioConfigData.DlfExEn = PcdGetBool (PcdAmdDlfExEn);
++  NbioData->NbioConfigData.PrecodeRequestEnable = PcdGetBool (PcdCfgPrecodeRequestEnable);
++  NbioData->NbioConfigData.PcieSpeedControl = PcdGet8 (PcdAmdPcieSpeedControl);
++  NbioData->NbioConfigData.AdvertiseEqToHighRateSupport = PcdGetBool (PcdAmdAdvertiseEqToHighRateSupport);
++  NbioData->NbioConfigData.FabricSdci = PcdGetBool (PcdAmdFabricSdci);
++
++  return EFI_SUCCESS;
++}
+diff --git a/Platform/Capri2-Genoa/Pei/RasDataInit.c b/Platform/Capri2-Genoa/Pei/RasDataInit.c
+new file mode 100644
+index 0000000..84ec214
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/RasDataInit.c
+@@ -0,0 +1,77 @@
++/**
++ * @file  RasDataInit.c
++ * @brief Initialize RAS data prior to openSIL execution..
++ *
++ */
++/**
++ * Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++ *
++ */
++
++#include <Library/DebugLib.h>
++#include <Library/PcdLib.h>
++#include <stdint.h>
++#include <stddef.h>
++#include <xSIM-api.h>
++#include <RAS/Common/RasClass-api.h>
++
++/**
++ * SetRasData
++ *
++ * @brief   Set the data in RAS init IP block
++ *
++ * @details Locate and initialize the IP block for RAS
++ *
++ * @return  EFI_SUCCESS   IP block successfully initialized
++ * @return  EFI_NOT_FOUND IP block structure not found
++ *
++ */
++EFI_STATUS
++SetRasData (
++  void
++  )
++{
++  RASCLASS_DATA_BLK *RasData;
++
++  RasData = (RASCLASS_DATA_BLK *)SilFindStructure (SilId_RasClass,  0);
++  DEBUG ((DEBUG_ERROR, "SIL RAS memory block is found at: 0x%x \n", RasData));
++  if (RasData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  // Initialize RasData from Host-FW PCDs
++  RasData->RasInputBlock.Temp = 0x1;
++
++  return EFI_SUCCESS;
++}
++
++/**
++ * OutputRasData
++ *
++ * @brief   Send RAS output data back to host FW.
++ *
++ * @details Any data that was changed from RAS and needs to be sent back to
++ *          Host-FW should be handled here.
++ *
++ * @return  EFI_SUCCESS   IP block successfully initialized
++ * @return  EFI_NOT_FOUND IP block structure not found
++ *
++ */
++EFI_STATUS
++OutputRasData (
++  void
++  )
++{
++  RASCLASS_DATA_BLK *RasData;
++
++  RasData = (RASCLASS_DATA_BLK *)SilFindStructure (SilId_RasClass,  0);
++  DEBUG ((DEBUG_ERROR, "SIL RAS memory block is found at: 0x%x \n", RasData));
++  if (RasData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  // Write data back to Host-FW PCDs
++  //RasData->RasOutputBlock.Temp;
++
++  return EFI_SUCCESS;
++}
+diff --git a/Platform/Capri2-Genoa/Pei/RcMgrDataInit.c b/Platform/Capri2-Genoa/Pei/RcMgrDataInit.c
+new file mode 100644
+index 0000000..12cd407
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/RcMgrDataInit.c
+@@ -0,0 +1,48 @@
++/**
++ * @file  RcMgrDataInit.c
++ * @brief Initialize RC manager data prior to openSIL execution.
++ *
++ */
++/**
++ * Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++ *
++ */
++#include <Library/DebugLib.h>
++#include <RcMgr/DfX/RcManager4-api.h>
++#include <Sil-api.h>
++#include <Library/FabricResourceInitLib.h>
++#include <Library/PcdLib.h>
++
++/**
++ * SetConfigRcMgr
++ *
++ * @brief Set the data in resource manager init IP block
++ * @details
++ *      1. Locate the RcMgrData - the resource initialization IP block
++ *      2. Use the found IP block to call FabricResourceInit (AgesaModulePkg/Library/FabricResourceManagerGenoaLib); the IP
++ *      block data is updated in the FabricResourceInit call. There are no defaults for RcMgrData, the SetInput() function
++ *      of this IP block is NULL.
++ * @return EFI_SUCCESS or EFI_DEVICE_ERROR
++ */
++
++EFI_STATUS
++SetConfigRcMgr (
++  void
++  )
++{
++  DFX_RCMGR_DATA_BLK *RcMgrData;
++  EFI_STATUS Status;
++
++  RcMgrData = (DFX_RCMGR_DATA_BLK *)SilFindStructure(SilId_RcManager,  0);
++  DEBUG ((DEBUG_ERROR, "SIL RC Init memory block is found blk at: 0x%x \n", RcMgrData));
++  if (RcMgrData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  RcMgrData->DFXRcmgrOutputBlock.AmdFabricCcxAsNumaDomain = PcdGetBool(PcdAmdFabricCcxAsNumaDomain);
++
++  Status = FabricResourceInit (&RcMgrData->DFXRcmgrInputBlock);
++  if (EFI_ERROR(Status)) return EFI_DEVICE_ERROR;
++
++  return EFI_SUCCESS;
++}
+diff --git a/Platform/Capri2-Genoa/Pei/SdciDataInit.c b/Platform/Capri2-Genoa/Pei/SdciDataInit.c
+new file mode 100644
+index 0000000..83bc5ab
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/SdciDataInit.c
+@@ -0,0 +1,44 @@
++/**
++ * @file  SdciDataInit.c
++ * @brief Initialize Sdci data prior to openSIL execution.
++ *
++ */
++/**
++ * Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++ *
++ */
++
++#include <Library/DebugLib.h>
++#include <Library/PcdLib.h>
++#include <Sil-api.h>
++#include <xSIM.h>
++#include <Sdci/SdciClass-api.h>
++#include <PiPei.h>
++
++/**
++ * SetSdciData
++ *
++ * @brief Set the SDCI input defaults
++ * @details
++ *      Locate the SDCI - the resource initialization IP block
++ * @return EFI_SUCCESS or EFI_DEVICE_ERROR
++ */
++EFI_STATUS
++SetSdciData (
++  void
++  )
++{
++  SDCICLASS_INPUT_BLK    *SdciData;
++  
++  SdciData = (SDCICLASS_INPUT_BLK *)SilFindStructure (SilId_SdciClass,  0);
++  DEBUG ((DEBUG_ERROR, "SIL SDCI memory block is found at: 0x%x \n", SdciData));
++  if (SdciData == NULL) {
++    return EFI_NOT_FOUND; // Could not find the IP input block
++  }
++
++  SdciData->AmdFabricSdci = PcdGetBool (PcdAmdFabricSdci);
++
++  DEBUG ((DEBUG_INFO, "SIL SDCI PCD AmdFabricSdci: 0x%x \n", SdciData->AmdFabricSdci));
++
++  return EFI_SUCCESS;
++}
+diff --git a/Platform/Capri2-Genoa/Pei/SilCapri2Pei.inf b/Platform/Capri2-Genoa/Pei/SilCapri2Pei.inf
+new file mode 100644
+index 0000000..94eee58
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/SilCapri2Pei.inf
+@@ -0,0 +1,377 @@
++#
++# @file  SilPei.inf
++# @brief PEI module made for OpenSil SI calls
++#
++# Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++#
++
++[Defines]
++  INF_VERSION                    = 0x00010005
++  BASE_NAME                      = SilCapri2Pei
++  FILE_GUID                      = bd546d89-7852-4f88-9392-66481327a8ee
++  MODULE_TYPE                    = PEIM
++  VERSION_STRING                 = 0.1
++  ENTRY_POINT                    = SilPeiEntryPoint
++
++[Sources]
++  SilDataInit.c
++  CcxDataInit.c
++  CxlDataInit.c
++  MpioDataInit.c
++  SdciDataInit.c
++  NbioDataInit.c
++  RasDataInit.c
++  FchDataInit.c
++  RcMgrDataInit.c
++
++[Packages]
++  MdePkg/MdePkg.dec
++  MdeModulePkg/MdeModulePkg.dec
++  AmdOpenSilPkg/opensil-uefi-interface/AmdOpenSilPkg.dec
++  AgesaModulePkg/AgesaPublicModulePkg.dec
++  AgesaPkg/AgesaPublicPkg.dec
++  AgesaModulePkg/AgesaCommonModulePkg.dec
++
++[LibraryClasses]
++  PeimEntryPoint
++  DebugLib
++  PcdLib
++  PeiServicesLib
++  libAMDxUSL
++  libAMDxSIM
++  FabricResourceInitLib
++  SilPeiInit
++  libAMDxPRF
++  AmdDirectoryBaseLib
++  AmdOemInitCapri2Lib
++
++[Guids]
++  gPeiOpenSilCcxDownCoreDataGuid
++
++[Pcd]
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgHdAudioEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgSkipPspMessage
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdOpnSpare
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgEarlyTrainTwoPcieLinks
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdEarlyBmcLinkTraining
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdEarlyBmcLinkSocket
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdEarlyBmcLinkLaneNum
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdEarlyBmcLinkDie
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdPcieAerReportMechanism
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgSevSnpSupport
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdApicMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdDownCoreMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdCcdMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdSmtMode
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdIbrsEn
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdEnvironmentFlag
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdBranchSampling
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdSnpMemCover
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdSnpMemSize
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdVmplEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdGameMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdL1StreamPrefetcher
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdL1StridePrefetcher
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdL1RegionPrefetcher
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdL2StreamPrefetcher
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdL2UpDownPrefetcher
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdCStateMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdCc6Ctrl
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdCStateIoBaseAddress
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdCpbMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdHardwarePrefetchMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdSoftwarePrefetchMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdSmee
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdRedirectForReturnDis
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdOpcacheCtrl
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdStreamingStoresCtrl
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdEnSpecStFill
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdEnableFSRM
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdEnableERMS
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdEnableRMSS
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdEnableSvmAVIC
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdIbsHardwareEn
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdCcxEnableAvx512
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdEnableSvmX2AVIC
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdMonMwaitDis
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr250
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr258
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr259
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr268
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr269
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr26A
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr26B
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr26C
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr26D
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr26E
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFixedMtrr26F
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgSkipPspMessage
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdEdpcEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgDxioFrequencyVetting
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdDisableWcSpecConfig
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchCfgSmbus0BaseAddress
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchCfgSioPmeBaseAddress
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchCfgAcpiPm1EvtBlkAddr
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchCfgAcpiPm1CntBlkAddr
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchCfgAcpiPmTmrBlkAddr
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchCfgCpuControlBlkAddr
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchCfgAcpiGpe0BlkAddr
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchCfgSmiCmdPortAddr
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdBootTimerEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdBootTimerResetType
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchI2c0SdaHold
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchI2c1SdaHold
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchI2c2SdaHold
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchI2c3SdaHold
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchI2c4SdaHold
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchI2c5SdaHold
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSpreadSpectrum
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdPwrFailShadow
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdNoClearThermalTripSts
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdStressResetMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchAlinkRasSupport
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchSpdHostCtrlRelease
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFchDimmTelemetry
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdOemProgrammingTablePtr
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdToggleAllPwrGoodOnCf9
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdLegacyFree
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdFchOscout1ClkContinous
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdLpcClockDriveStrength
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdLpcClockDriveStrengthRiseTime
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdLpcClockDriveStrengthFallTime
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdFchWdtEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSerialIrqEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgFchIoapicId
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdFchDisableAsfSecondary
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdHpetEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdHpetMsiDis
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdTimerTickTrack
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdClockInterruptTag
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdNoneSioKbcSupport
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdNativePcieSupport
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCppcSciBitMap
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSmuFeatureControlDefines
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.FchRTDeviceEnableMap
++  gEfiMdePkgTokenSpaceGuid.PcdPciExpressBaseAddress
++  gEfiAmdAgesaPkgTokenSpaceGuid.FchUart0LegacyEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.FchUart1LegacyEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.FchUart2LegacyEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.FchUart3LegacyEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSmbusSsid
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXhciSsid
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdXhci0Enable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdXhci1Enable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXhci0DevRemovable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdDisableXhciPortLate
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXhciUsb3PortDisable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXhciUsb2PortDisable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXhciUsb20OcPinSelect
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXhciUsb31OcPinSelect
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXhciOcPolarityCfgLow
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXhciForceGen1
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdUsbSparseModeEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdUsbGenoaOemConfigurationTable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdALinkClkGateOff
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdBLinkClkGateOff
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAbClockGating
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSbgMemoryPowerSaving
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSbgClockGating
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXdmaDmaWrite16ByteMode
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXdmaMemoryPowerSaving
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXdmaPendingNprThreshold
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdXdmaDncplOrderDis
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSdphostBypassDataPack
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSdphostDisNpmwrProtect
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdResetCpuOnSyncFlood
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSyncFloodToApml
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataSetMaxGen2
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataClkMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataEnable2
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataClass
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataAggrLinkPmCap
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataPortMultCap
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataPscCap
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataSscCap
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataClkAutoOff
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataFisBasedSwitching
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataCccSupport
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataDisableGenericMode
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataAhciEnclosureManagement
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataMsiEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataTargetSupport8Device
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataRasSupport
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataAhciDisPrefetchFunction
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataAhciSsid
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataRaidSsid
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataRaid5Ssid
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataAhciDisPrefetchFunction
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataDevSlpPort0
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataDevSlpPort1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataDevSlpPort0Num
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataDevSlpPort1Num
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataSgpio0
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataControllerAutoShutdown
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSataMultiDiePortESP
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataMultiDiePortShutDown
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataIoDie0PortMode
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataSgpioMultiDieEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataBISTLComplianceMode
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSataMultiDiePortRxPolarity
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdResetSpiSpeed
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdResetWriteSpeed
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdResetSpiTpmSpeed
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdLpcEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdLpcClk0
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdLpcClk1
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdLpcSsid
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFabricCcxAsNumaDomain
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdAgesaPstatePolicy
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdSplitRmpTable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdCpuPauseDelay
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgDxioClockGating
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdPcieDxioTimingControlEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdPCIELinkReceiverDetectionPolling
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdPCIELinkResetToTrainingTime
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdPCIELinkL0Polling
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdPCIeExactMatchEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdDxioPhyValid
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdDxioPhyProgramming
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgSkipPspMessage
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdDxioSaveRestoreModes
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdAllowCompliance
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdHotPlugHandlingMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSrisEnableMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSrisSkipInterval
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSrisSkpIntervalSel
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSrisCfgType
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSrisAutoDetectMode
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSrisAutodetectFactor
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSrisLowerSkpOsGenSup
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdSrisLowerSkpOsRcvSup
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdCxlOnAllPorts
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCxlCorrectableErrorLogging
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCxlUnCorrectableErrorLogging
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgAEREnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgMcCapEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgRcvErrEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdEarlyBmcLinkSocket
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdEarlyBmcLinkLaneNum
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSurpriseDownFeature
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdLcMultAutoSpdChgOnLastRateEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdRxMarginEnabled
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgPcieCVTestWA
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgPcieAriSupport
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgNbioCTOtoSC
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgNbioCTOIgnoreError
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgNbioSsid
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgIommuSsid
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgPspccpSsid
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgNtbccpSsid
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgNbifF0Ssid
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgNtbSsid
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdPcieSubsystemDeviceID
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdPcieSubsystemVendorID
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdGppAtomicOps
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdGfxAtomicOps
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdNbioReportEdbErrors
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAmdPreSilCtrl0
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdMPIOAncDataSupport
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAfterResetDelay
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgEarlyLink
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdCfgExposeUnusedPciePorts
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgForcePcieGenSpeed
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgSataPhyTuning
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdPcieLinkComplianceModeAllPorts
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdMCTPEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSbrBrokenLaneAvoidanceSup
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdAutoFullMarginSup
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdPciePresetMask8GtAllPort
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdPciePresetMask16GtAllPort
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdPciePresetMask32GtAllPort
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdPcieLinkAspmAllPort
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdMCTPMasterSeg
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdMCTPMasterID
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdReportErrorsToRcec
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCxlIoArbWeights
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCxlCaMemArbWeights
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCnliTokenAdvertisement
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdCxlProtocolErrorReporting
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSyncHeaderByPass
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCxlTempGen5AdvertAltPtcl
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCxlCamemRxOptimization
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCxlTxOptimizeDirectOutEn
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdFabricSdci
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdAcpiS3Support
++# NBIO_CONFIG_DATA
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdPTDMAEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdIOHCClkGatingSupport
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgNbifMgcgClkGating
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgSstunlClkGating
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgSyshubMgcgClkGating
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdTPHCompleterEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdNbifMgcgHysteresis
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdSyshubMgcgHysteresis
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgIohcNonPCIBarInitDbg
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgIohcNonPCIBarInitFastReg
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgIohcNonPCIBarInitFastRegCtl
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgIommuMMIOAddressReservedEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgIommuAvicSupport
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdIommuL1ClockGatingEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdIommuL2ClockGatingEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdIOHCPgEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdNbioGlobalCgOverride
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgIommuSupport
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgACSEnable
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgPCIeLTREnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdMaskDpcCapability
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdPcieEcrcEnablement
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgAutoSpeedChangeEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdEsmEnableAllRootPorts
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdEsmEnableAllRootPorts
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdEsmTargetSpeed
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgRxMarginPersistenceMode
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgSriovEnDev0F1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgAriEnDev0F1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgAerEnDev0F1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgAcsEnDev0F1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgAtsEnDev0F1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgPasidEnDev0F1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgPwrEnDev0F1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgRtrEnDev0F1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdCfgPriEnDev0F1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAtcEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsEnRccDev0
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAerEnRccDev0
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsSourceValStrap5
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsTranslationalBlockingStrap5
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsP2pReqStrap5
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsP2pCompStrap5
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsUpstreamFwdStrap5
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsP2PEgressStrap5
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsDirectTranslatedStrap5
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsSsidEnStrap5
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdDlfEnStrap1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdPhy16gtStrap1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdMarginEnStrap1
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdPriEnPageReq
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdPriResetPageReq
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsSourceVal
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsTranslationalBlocking
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsP2pReq
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsP2pComp
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsUpstreamFwd
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAcsP2PEgress
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdRccDev0E2EPrefix
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdRccDev0ExtendedFmtSupported
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdDlfCapEn
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdDlfExEn
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdPcieSpeedControl
++  gEfiAmdAgesaModulePkgTokenSpaceGuid.PcdCfgPrecodeRequestEnable
++  gEfiAmdAgesaPkgTokenSpaceGuid.PcdAmdAdvertiseEqToHighRateSupport
++
++[Ppis]
++ gOpenSilxPrfServicePpiGuid #PRODUCED
++
++[Depex]
++  TRUE
+diff --git a/Platform/Capri2-Genoa/Pei/SilDataInit.c b/Platform/Capri2-Genoa/Pei/SilDataInit.c
+new file mode 100644
+index 0000000..dbbe34d
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Pei/SilDataInit.c
+@@ -0,0 +1,102 @@
++/* Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved. */
++/**
++ * @file  SilDataInit.c
++ * @brief PEIM created to execute Capri2 SI OpenSIL call.
++ *
++ */
++
++#include <Library/DebugLib.h>
++#include <Library/PeiServicesLib.h>
++#include <Sil-api.h>
++#include <SilPei.h>
++#include <xPrfServicesPei.h>
++
++EFI_STATUS SetConfigRcMgr (VOID);
++EFI_STATUS SetCcxData (VOID);
++EFI_STATUS SetFchData (VOID);
++EFI_STATUS CcxDataBackToHostFW (VOID);
++EFI_STATUS SetMpioData (VOID);
++EFI_STATUS SetSdciData (VOID);
++EFI_STATUS SetCxlData (VOID);
++EFI_STATUS CxlDataBackToHostFW (VOID);
++EFI_STATUS SetNbioData (VOID);
++
++/**
++ * Capri2lIpBlocksInit
++ *
++ * Initialize IP blocks with the host FW specific data: PCDs, Setup variables, etc.
++ */
++EFI_STATUS Capri2IpBlocksInit (VOID)
++{
++  EFI_STATUS Status;
++
++  // Place Capri2 IP data init code that depends on Host FW (PCDs, Setup questions, etc.)
++  Status = SetCcxData ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetConfigRcMgr ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetFchData ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetNbioData ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetMpioData ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetSdciData ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = SetCxlData ();
++  ASSERT_EFI_ERROR (Status);
++
++  if (EFI_ERROR (Status)) {
++    return Status;
++  }
++
++  return EFI_SUCCESS;
++}
++
++/**
++ * IPBlockDataBackToHostFW
++ *
++ * Send Updated IP blocks Data to host FW specific data: PCDs, Setup variables, etc.
++ */
++EFI_STATUS IPBlockDataBackToHostFW (VOID)
++{
++  EFI_STATUS Status;
++
++  Status = CcxDataBackToHostFW ();
++  ASSERT_EFI_ERROR (Status);
++
++  Status = CxlDataBackToHostFW ();
++  ASSERT_EFI_ERROR (Status);
++  return Status;
++}
++
++/**
++ *  Capri2 openSIL FW PEI init driver entry point
++ *
++ *  @param FileHandle   This file handle
++ *  @param PeiServices  Pointer to PEI services
++ *
++ *  @return EFI_SUCCESS if Ethanol IP block data initialization is successful
++ */
++EFI_STATUS
++EFIAPI
++SilPeiEntryPoint (
++  IN       EFI_PEI_FILE_HANDLE  FileHandle,
++  IN CONST EFI_PEI_SERVICES     **PeiServices
++  )
++{
++  EFI_STATUS  Status;
++
++  Status = SilFwDataInit (PeiServices, Capri2IpBlocksInit);
++  ASSERT_EFI_ERROR (Status);
++
++  xPrfServicesPpiInstall();
++
++  return Status;
++}
+diff --git a/Platform/Capri2-Genoa/Smm/SilCapri2Smm.inf b/Platform/Capri2-Genoa/Smm/SilCapri2Smm.inf
+new file mode 100644
+index 0000000..aa6e3de
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Smm/SilCapri2Smm.inf
+@@ -0,0 +1,42 @@
++#;*****************************************************************************
++#;
++#; Copyright (C) 2018-2024 Advanced Micro Devices, Inc. All rights reserved.
++#;
++#;******************************************************************************
++
++[defines]
++  INF_VERSION                    = 0x00010005
++  BASE_NAME                      = SilCapri2Smm
++  FILE_GUID                      = 940E1CA7-9EA3-4939-AE29-2B4E26C6CCF3
++  MODULE_TYPE                    = DXE_SMM_DRIVER
++  PI_SPECIFICATION_VERSION       = 0x0001000A
++  VERSION_STRING                 = 1.1
++  ENTRY_POINT                    = SilSmmEntryPoint
++
++[sources]
++  SilDataInitSmm.c
++
++[Packages]
++  MdePkg/MdePkg.dec
++  AmdOpenSilPkg/opensil-uefi-interface/AmdOpenSilPkg.dec
++
++[LibraryClasses]
++  SmmServicesTableLib
++  UefiDriverEntryPoint
++  DebugLib
++  SilSmmInit
++
++[Pcd]
++
++[Guids]
++
++[Protocols]
++  gOpenSilxPrfSmmProtocolGuid                #PRODUCED
++
++[Depex]
++  TRUE
++
++[FixedPcd]
++
++
++
+diff --git a/Platform/Capri2-Genoa/Smm/SilDataInitSmm.c b/Platform/Capri2-Genoa/Smm/SilDataInitSmm.c
+new file mode 100644
+index 0000000..465fc65
+--- /dev/null
++++ b/Platform/Capri2-Genoa/Smm/SilDataInitSmm.c
+@@ -0,0 +1,41 @@
++/**
++ * @file  SilDataInit.c
++ * @brief DXE driver created to execute Capri2 SI OpenSIL call.
++ *
++ */
++/*
++ * Copyright 2021-2024 Advanced Micro Devices, Inc. All rights reserved.
++ *
++ */
++#include <Uefi.h>
++#include <Library/DebugLib.h>
++#include <Sil-api.h>
++#include <SilSmm.h>
++#include "xPrfServicesSmm.h"
++
++/**
++ * SilSmmEntryPoint
++ *
++ * @brief openSIL FW SMM driver entry point
++ *
++ * @param ImageHandle   Image handle of DXE driver
++ * @param Systemtable   Pointer to UEFI system table
++ *
++ * @return EFI_SUCCESS
++ */
++EFI_STATUS
++EFIAPI
++SilSmmEntryPoint (
++  IN       EFI_HANDLE           ImageHandle,
++  IN       EFI_SYSTEM_TABLE     *SystemTable
++  )
++{
++  EFI_STATUS Status;
++
++  Status = SilFwDataInit (SystemTable);
++  ASSERT_EFI_ERROR (Status);
++
++  Status = xPrfServicesSmmProtocolInstall ();
++
++  return Status;
++}
+\ No newline at end of file
+-- 
+2.34.1
+

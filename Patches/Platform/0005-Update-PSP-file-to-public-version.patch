@@ -1,0 +1,189 @@
+From dc0a1471f6437269d9b686031edc16a2294e9c34 Mon Sep 17 00:00:00 2001
+From: Samba Chi <samba.chi@mitaccomputing.com>
+Date: Thu, 14 Nov 2024 11:40:02 +0800
+Subject: [PATCH 5/5] Update PSP file to public version
+
+---
+ .../Capri2BoardPkg/PspDataGenoa.xml           | 144 ++++++++----------
+ 1 file changed, 64 insertions(+), 80 deletions(-)
+
+diff --git a/GenoaOpenBoardPkg/Capri2BoardPkg/PspDataGenoa.xml b/GenoaOpenBoardPkg/Capri2BoardPkg/PspDataGenoa.xml
+index 255846c..b1ffcf8 100644
+--- a/GenoaOpenBoardPkg/Capri2BoardPkg/PspDataGenoa.xml
++++ b/GenoaOpenBoardPkg/Capri2BoardPkg/PspDataGenoa.xml
+@@ -7,32 +7,30 @@
+ -->
+ <DIRS AddressMode = "1">
+   <PSP_DIR Level="1" Base="0x146000" Size="0x200000" SpiBlockSize="0x1000">
+-    <IMAGE_ENTRY Type="0x0" File="PspDirL10_Typex0_0_0_0_AmdPubKey.bin"/>
++    <IMAGE_ENTRY Type="0x0" File="AmdPubKey.tkn"/>
+     <POINT_ENTRY Type="0x1" Address="0x387400" Size="0x34000"/>
+-    <IMAGE_ENTRY Type="0x3" File="PspDirL10_Typex3_0_0_0_PspRecBL.bin"/>
+-    <IMAGE_ENTRY Type="0x8" SubProgram="0x1" File="PspDirL10_Typex8_0_0_1_Smu.bin"/>
+-    <IMAGE_ENTRY Type="0x8" SubProgram="0x2" File="PspDirL10_Typex8_0_0_2_Smu.bin"/>
+-    <IMAGE_ENTRY Type="0xA" File="PspDirL10_Typexa_0_0_0_OemAblKey.bin"/>
++    <IMAGE_ENTRY Type="0x3" File="TypeId0x03_PspRecBl.esbin"/>
++    <IMAGE_ENTRY Type="0x8" SubProgram="0x1" File="TypeId0x08_SmuFirmware.ecsbin"/>
++    <IMAGE_ENTRY Type="0xA" File="TypeId0x0A_PspAblPubKey.stkn"/>
+     <VALUE_ENTRY Type="0xB" Value="0x01"/>
+-    <IMAGE_ENTRY Type="0x12" SubProgram="0x1" File="PspDirL10_Typex12_0_0_1_Smu2.bin"/>
+-    <IMAGE_ENTRY Type="0x12" SubProgram="0x2" File="PspDirL10_Typex12_0_0_2_Smu2.bin"/>
+-    <IMAGE_ENTRY Type="0x13" File="PspDirL10_Typex13_0_0_0_PspEarlyUnlock.bin"/>
+-    <IMAGE_ENTRY Type="0x21" File="PspDirL10_Typex21_0_0_0_ikek.bin"/>
+-    <IMAGE_ENTRY Type="0x24" SubProgram="0x1" File="PspDirL10_Typex24_0_0_1_SecureGasket.bin"/>
+-    <IMAGE_ENTRY Type="0x24" SubProgram="0x2" File="PspDirL10_Typex24_0_0_2_SecureGasket.bin"/>
+-    <IMAGE_ENTRY Type="0x2a" SubProgram="0x1" File="PspDirL10_Typex2a_0_0_1_Mp5Fw.bin"/>
+-    <IMAGE_ENTRY Type="0x2a" SubProgram="0x2" File="PspDirL10_Typex2a_0_0_2_Mp5Fw.bin"/>
+-    <IMAGE_ENTRY Type="0x30" File="PspDirL10_Typex30_0_0_0_PspAgesaBL0.bin"/>
++    <IMAGE_ENTRY Type="0x12" SubProgram="0x1" File="TypeId0x12_SmuFirmware2.sbin"/>
++    <IMAGE_ENTRY Type="0x13" File="TypeId0x13_SduFw.esbin"/>
++    <IMAGE_ENTRY Type="0x21" File="TypeId0x21_PspAmdIkek.bin"/>
++    <IMAGE_ENTRY Type="0x22" File="SecureEmptyToken.bin"/>
++    <IMAGE_ENTRY Type="0x24" SubProgram="0x1" File="TypeId0x24_RegisterAccessPolicy.esbin"/>
++    <IMAGE_ENTRY Type="0x2a" SubProgram="0x1" File="TypeId0x2a_Mp5.ecsbin"/>
++    <IMAGE_ENTRY Type="0x30" File="Typex30_0_0_0_PspAgesaBL0.bin"/>
+     <POINT_ENTRY Type="0x40" Address="0x387000" Size="0x400"/>
+-    <IMAGE_ENTRY Type="0x42" File="PspDirL10_Typex42_0_0_0_DxioFw.bin"/>
+-    <IMAGE_ENTRY Type="0x44" File="PspDirL10_Typex44_0_0_0_UsbPhyFw.bin"/>
+-    <IMAGE_ENTRY Type="0x50" File="PspDirL10_Typex50_0_0_0_PspBlPubKey.bin"/>
+-    <IMAGE_ENTRY Type="0x55" File="PspDirL10_Typex55_0_0_0_BLAntiRB.bin"/>
+-    <IMAGE_ENTRY Type="0x5D" File="PspDirL10_Typex5d_0_0_0_MPIOOffchipFW.bin"/>
+-    <IMAGE_ENTRY Type="0x76" File="PspDirL10_Typex76_0_0_0_RIB.bin"/>
+-    <IMAGE_ENTRY Type="0x8C" File="PspDirL10_Typex8c_0_0_0_MpdmaTfFw.bin"/>
+-    <IMAGE_ENTRY Type="0x91" File="PspDirL10_Typex91_0_0_0_Gmi3PhyFw.bin"/>
+-    <IMAGE_ENTRY Type="0x92" File="PspDirL10_Typex92_0_0_0_MpdmaPmFw.bin"/>
++    <IMAGE_ENTRY Type="0x42" File="TypeId0x42_PhyFw.esbin"/>
++    <IMAGE_ENTRY Type="0x44" File="TypeId0x44_USB_PHY.esbin"/>
++    <IMAGE_ENTRY Type="0x47" File="TypeId0x47_PspDrtmUapp.esbin"/>
++    <IMAGE_ENTRY Type="0x50" File="TypeId0x50_PspKeyDataBase.sbin"/>
++    <IMAGE_ENTRY Type="0x55" File="TypeId0x55_SPLTable.sbin"/>
++    <IMAGE_ENTRY Type="0x5D" File="TypeId0x5DMpioFw.cesbin"/>
++    <IMAGE_ENTRY Type="0x76" File="TypeId0x76_DfRib.ecsbin"/>
++    <IMAGE_ENTRY Type="0x8C" File="TypeId0x8C_MPDMATF.esbin"/>
++    <IMAGE_ENTRY Type="0x91" File="TypeId0x91_GmiPhyFw.esbin"/>
++    <IMAGE_ENTRY Type="0x92" File="TypeId0x92_Page.esbin"/>
+   </PSP_DIR>
+   <BIOS_DIR Level="1" Base="0x346000" Size="0x40000" SpiBlockSize=" 0x1000">
+     <IMAGE_ENTRY Type="0x68" Instance="0x00" SubProgram="0x0" File="BiosDirL10_Typex68_0_0_0_ApcbRec.bin"/>
+@@ -42,50 +40,43 @@
+     <POINT_ENTRY Type="0x62" Address="0xD00000" Destination="0x76D00000" Size="0x300000">
+      <TypeAttrib Compressed="0x0" Copy="0x1" ReadOnly="0x0" RegionType="0x0" ResetImage="0x1"/>
+     </POINT_ENTRY>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x03" SubProgram="0x0" File="BiosDirL10_Typex64_0_3_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x04" SubProgram="0x0" File="BiosDirL10_Typex64_0_4_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x09" SubProgram="0x0" File="BiosDirL10_Typex64_0_9_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x0A" SubProgram="0x0" File="BiosDirL10_Typex64_0_a_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x0B" SubProgram="0x0" File="BiosDirL10_Typex64_0_b_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x03" SubProgram="0x0" File="BiosDirL10_Typex65_0_3_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x04" SubProgram="0x0" File="BiosDirL10_Typex65_0_4_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x09" SubProgram="0x0" File="BiosDirL10_Typex65_0_9_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x0A" SubProgram="0x0" File="BiosDirL10_Typex65_0_a_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x0B" SubProgram="0x0" File="BiosDirL10_Typex65_0_b_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x0C" SubProgram="0x0" File="BiosDirL10_Typex65_0_c_0_PmuData.bin"/>
++    <IMAGE_ENTRY Type="0x64" Instance="0x03" SubProgram="0x0" File="Appb_Ddr5_0x64_3_Rdimm_Imem1.ecsbin"/>
++    <IMAGE_ENTRY Type="0x65" Instance="0x03" SubProgram="0x0" File="Appb_Ddr5_0x65_3_Rdimm_Dmem1.ecsbin"/>
++    <IMAGE_ENTRY Type="0x64" Instance="0x04" SubProgram="0x0" File="Appb_Ddr5_0x64_4_Rdimm_Imem2.ecsbin"/>
++    <IMAGE_ENTRY Type="0x65" Instance="0x04" SubProgram="0x0" File="Appb_Ddr5_0x65_4_Rdimm_Dmem2.ecsbin"/>
++    <IMAGE_ENTRY Type="0x64" Instance="0x09" SubProgram="0x0" File="Appb_Ddr5_0x64_9_Rdimm_Imem1.ecsbin"/>
++    <IMAGE_ENTRY Type="0x65" Instance="0x09" SubProgram="0x0" File="Appb_Ddr5_0x65_9_Rdimm_Dmem1.ecsbin"/>
++    <IMAGE_ENTRY Type="0x64" Instance="0x0A" SubProgram="0x0" File="Appb_Ddr5_0x64_A_Rdimm_Imem2.ecsbin"/>
++    <IMAGE_ENTRY Type="0x65" Instance="0x0A" SubProgram="0x0" File="Appb_Ddr5_0x65_A_Rdimm_Dmem2.ecsbin"/>
+     <POINT_ENTRY Type="0x70" Address="0x5BB000" Size="0x400"/>
+   </BIOS_DIR>
+   <PSP_DIR Level="2" Base="0x387000" Size="0x234000" SpiBlockSize="0x1000">
+-    <IMAGE_ENTRY Type="0x1" File="PspDirL20_Typex1_0_0_0_PspBootLoader.bin" Size="0x34000"/>
+-    <IMAGE_ENTRY Type="0x8" SubProgram="0x1" File="PspDirL20_Typex8_0_0_1_Smu.bin"/>
+-    <IMAGE_ENTRY Type="0x8" SubProgram="0x2" File="PspDirL20_Typex8_0_0_2_Smu.bin"/>
+-    <IMAGE_ENTRY Type="0x9" File="PspDirL20_Typex9_0_0_0_DbgKey.bin"/>
+-    <IMAGE_ENTRY Type="0xA" File="PspDirL20_Typexa_0_0_0_OemAblKey.bin"/>
++    <IMAGE_ENTRY Type="0x1" File="TypeId0x01_PspBl.esbin" Size="0x34000"/>
++    <IMAGE_ENTRY Type="0x8" SubProgram="0x1" File="TypeId0x08_SmuFirmware.ecsbin"/>
++    <IMAGE_ENTRY Type="0x9" File="TypeId0x09_PspDebugUnlockToken.stkn"/>
++    <IMAGE_ENTRY Type="0xA" File="TypeId0x0A_PspAblPubKey.stkn"/>
+     <VALUE_ENTRY Type="0xB" Value="0x01"/>
+-    <IMAGE_ENTRY Type="0x12" SubProgram="0x1" File="PspDirL20_Typex12_0_0_1_Smu2.bin"/>
+-    <IMAGE_ENTRY Type="0x12" SubProgram="0x2" File="PspDirL20_Typex12_0_0_2_Smu2.bin"/>
+-    <IMAGE_ENTRY Type="0x13" File="PspDirL20_Typex13_0_0_0_PspEarlyUnlock.bin"/>
+-    <IMAGE_ENTRY Type="0x21" File="PspDirL20_Typex21_0_0_0_ikek.bin"/>
+-    <IMAGE_ENTRY Type="0x22" File="PspDirL20_Typex22_0_0_0_PspTokenUnlockData.bin"/>
+-    <IMAGE_ENTRY Type="0x24" SubProgram="0x1" File="PspDirL20_Typex24_0_0_1_SecureGasket.bin"/>
+-    <IMAGE_ENTRY Type="0x24" SubProgram="0x2" File="PspDirL20_Typex24_0_0_2_SecureGasket.bin"/>
+-    <IMAGE_ENTRY Type="0x2a" SubProgram="0x1" File="PspDirL20_Typex2a_0_0_1_Mp5Fw.bin"/>
+-    <IMAGE_ENTRY Type="0x2a" SubProgram="0x2" File="PspDirL20_Typex2a_0_0_2_Mp5Fw.bin"/>
+-    <IMAGE_ENTRY Type="0x30" File="PspDirL20_Typex30_0_0_0_PspAgesaBL0.bin"/>
+-    <IMAGE_ENTRY Type="0x38" File="PspDirL20_Typex38_0_0_0_SevData.bin"/>
+-    <IMAGE_ENTRY Type="0x39" File="PspDirL20_Typex39_0_0_0_SevCode.bin"/>
+-    <IMAGE_ENTRY Type="0x42" File="PspDirL20_Typex42_0_0_0_DxioFw.bin"/>
+-    <IMAGE_ENTRY Type="0x44" File="PspDirL20_Typex44_0_0_0_UsbPhyFw.bin"/>
+-    <IMAGE_ENTRY Type="0x47" File="PspDirL20_Typex47_0_0_0_DrtmTa.bin"/>
+-    <IMAGE_ENTRY Type="0x50" File="PspDirL20_Typex50_0_0_0_PspBlPubKey.bin"/>
+-    <IMAGE_ENTRY Type="0x55" File="PspDirL20_Typex55_0_0_0_BLAntiRB.bin"/>
+-    <IMAGE_ENTRY Type="0x5D" File="PspDirL20_Typex5d_0_0_0_MPIOOffchipFW.bin"/>
+-    <IMAGE_ENTRY Type="0x76" File="PspDirL20_Typex76_0_0_0_RIB.bin"/>
+-    <IMAGE_ENTRY Type="0x8C" File="PspDirL20_Typex8c_0_0_0_MpdmaTfFw.bin"/>
+-    <IMAGE_ENTRY Type="0x91" File="PspDirL20_Typex91_0_0_0_Gmi3PhyFw.bin"/>
+-    <IMAGE_ENTRY Type="0x92" File="PspDirL20_Typex92_0_0_0_MpdmaPmFw.bin"/>
++    <IMAGE_ENTRY Type="0x12" SubProgram="0x1" File="TypeId0x12_SmuFirmware2.sbin"/>
++    <IMAGE_ENTRY Type="0x13" File="TypeId0x13_SduFw.esbin"/>
++    <IMAGE_ENTRY Type="0x21" File="TypeId0x21_PspAmdIkek.bin"/>
++    <IMAGE_ENTRY Type="0x22" File="SecureEmptyToken.bin"/>
++    <IMAGE_ENTRY Type="0x24" SubProgram="0x1" File="TypeId0x24_RegisterAccessPolicy.esbin"/>
++    <IMAGE_ENTRY Type="0x2a" SubProgram="0x1" File="TypeId0x2a_Mp5.ecsbin"/>
++    <IMAGE_ENTRY Type="0x30" File="Typex30_0_0_0_PspAgesaBL0.bin"/>
++    <IMAGE_ENTRY Type="0x38" File="PspSevEmptyData.bin"/>
++    <IMAGE_ENTRY Type="0x39" File="TypeId0x39_SevFw.esbin"/>
++    <IMAGE_ENTRY Type="0x42" File="TypeId0x42_PhyFw.esbin"/>
++    <IMAGE_ENTRY Type="0x44" File="TypeId0x44_USB_PHY.esbin"/>
++    <IMAGE_ENTRY Type="0x47" File="TypeId0x47_PspDrtmUapp.esbin"/>
++    <IMAGE_ENTRY Type="0x50" File="TypeId0x50_PspKeyDataBase.sbin"/>
++    <IMAGE_ENTRY Type="0x55" File="TypeId0x55_SPLTable.sbin"/>
++    <IMAGE_ENTRY Type="0x5D" File="TypeId0x5DMpioFw.cesbin"/>
++    <IMAGE_ENTRY Type="0x76" File="TypeId0x76_DfRib.ecsbin"/>
++    <IMAGE_ENTRY Type="0x8C" File="TypeId0x8C_MPDMATF.esbin"/>
++    <IMAGE_ENTRY Type="0x91" File="TypeId0x91_GmiPhyFw.esbin"/>
++    <IMAGE_ENTRY Type="0x92" File="TypeId0x92_Page.esbin"/>
+   </PSP_DIR>
+-  <BIOS_DIR Level="2" Base="0x5BB000" Size="0xF0000" SpiBlockSize=" 0x1000">
++  <BIOS_DIR Level="2" Base="0x5BB000" Size="0xC0000" SpiBlockSize=" 0x1000">
+     <IMAGE_ENTRY Type="0x68" Instance="0x00" SubProgram="0x0" File="BiosDirL20_Typex68_0_0_0_ApcbRec.bin"/>
+     <IMAGE_ENTRY Type="0x68" Instance="0x08" SubProgram="0x0" File="BiosDirL20_Typex68_0_8_0_ApcbRec.bin"/>
+     <IMAGE_ENTRY Type="0x68" Instance="0x09" SubProgram="0x0" File="BiosDirL20_Typex68_0_9_0_ApcbRec.bin"/>
+@@ -95,23 +86,16 @@
+     <POINT_ENTRY Type="0x62" Address="0xD00000" Destination="0x76D00000" Size="0x300000">
+      <TypeAttrib Compressed="0x0" Copy="0x1" ReadOnly="0x0" RegionType="0x0" ResetImage="0x1"/>
+     </POINT_ENTRY>
+-    <IMAGE_ENTRY Type="0x63" Instance="0x00" SubProgram="0x0" File="BiosDirL20_Typex63_0_0_0_ApobNv.bin"/>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x03" SubProgram="0x0" File="BiosDirL20_Typex64_0_3_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x04" SubProgram="0x0" File="BiosDirL20_Typex64_0_4_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x09" SubProgram="0x0" File="BiosDirL20_Typex64_0_9_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x0A" SubProgram="0x0" File="BiosDirL20_Typex64_0_a_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x64" Instance="0x0B" SubProgram="0x0" File="BiosDirL20_Typex64_0_b_0_PmuCode.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x03" SubProgram="0x0" File="BiosDirL20_Typex65_0_3_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x04" SubProgram="0x0" File="BiosDirL20_Typex65_0_4_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x09" SubProgram="0x0" File="BiosDirL20_Typex65_0_9_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x0A" SubProgram="0x0" File="BiosDirL20_Typex65_0_a_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x0B" SubProgram="0x0" File="BiosDirL20_Typex65_0_b_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x65" Instance="0x0C" SubProgram="0x0" File="BiosDirL20_Typex65_0_c_0_PmuData.bin"/>
+-    <IMAGE_ENTRY Type="0x66" Instance="0x00" File="BiosDirL20_Typex66_0_0_0_UCodePatch.bin"/>
+-    <IMAGE_ENTRY Type="0x66" Instance="0x01" File="BiosDirL20_Typex66_0_1_0_UCodePatch.bin"/>
+-    <IMAGE_ENTRY Type="0x66" Instance="0x02" File="BiosDirL20_Typex66_0_2_0_UCodePatch.bin"/>
+-    <IMAGE_ENTRY Type="0x66" Instance="0x03" File="BiosDirL20_Typex66_0_3_0_UCodePatch.bin"/>
+-    <IMAGE_ENTRY Type="0x66" Instance="0x04" File="BiosDirL20_Typex66_0_4_0_UCodePatch.bin"/>
+-    <IMAGE_ENTRY Type="0x66" Instance="0x05" File="BiosDirL20_Typex66_0_5_0_UCodePatch.bin"/>
++    <IMAGE_ENTRY Type="0x63" Instance="0x00" SubProgram="0x0" File="APOB_NV.bin"/>
++    <IMAGE_ENTRY Type="0x64" Instance="0x03" SubProgram="0x0" File="Appb_Ddr5_0x64_3_Rdimm_Imem1.ecsbin"/>
++    <IMAGE_ENTRY Type="0x65" Instance="0x03" SubProgram="0x0" File="Appb_Ddr5_0x65_3_Rdimm_Dmem1.ecsbin"/>
++    <IMAGE_ENTRY Type="0x64" Instance="0x04" SubProgram="0x0" File="Appb_Ddr5_0x64_4_Rdimm_Imem2.ecsbin"/>
++    <IMAGE_ENTRY Type="0x65" Instance="0x04" SubProgram="0x0" File="Appb_Ddr5_0x65_4_Rdimm_Dmem2.ecsbin"/>
++    <IMAGE_ENTRY Type="0x64" Instance="0x09" SubProgram="0x0" File="Appb_Ddr5_0x64_9_Rdimm_Imem1.ecsbin"/>
++    <IMAGE_ENTRY Type="0x65" Instance="0x09" SubProgram="0x0" File="Appb_Ddr5_0x65_9_Rdimm_Dmem1.ecsbin"/>
++    <IMAGE_ENTRY Type="0x64" Instance="0x0A" SubProgram="0x0" File="Appb_Ddr5_0x64_A_Rdimm_Imem2.ecsbin"/>
++    <IMAGE_ENTRY Type="0x65" Instance="0x0A" SubProgram="0x0" File="Appb_Ddr5_0x65_A_Rdimm_Dmem2.ecsbin"/>
++    <IMAGE_ENTRY Type="0x66" Instance="0x00" File="UcodePatch_B0.bin"/>
++    <IMAGE_ENTRY Type="0x66" Instance="0x01" File="UcodePatch_B1.bin"/>
+   </BIOS_DIR>
+ </DIRS>
+\ No newline at end of file
+-- 
+2.34.1
+
