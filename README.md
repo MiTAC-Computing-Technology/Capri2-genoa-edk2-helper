@@ -1,6 +1,7 @@
 # Capri2-genoa-edk2-helper
 
-This is source code setup repository for MiTAC Capri2 of Genoa/OpenSIL/EDK2.
+1. This is source code setup repository for MiTAC Capri2 of Genoa/OpenSIL/EDK2.
+2. Supported platform: MiTAC Capri2_CP2S11  ( https://www.mitaccomputing.com/OCPserver_CP2S11_CP2S11-U_EN~Spec )
 
 
 ## Clone Repositories
